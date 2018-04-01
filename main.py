@@ -3,6 +3,117 @@ import time
 import binascii
 import struct
 from time import gmtime, strftime
+import datetime
+import sys
+import socket
+from pymongo import MongoClient
+import sqlite3
+import os
+import inspect
+import threading
+import json
+import signal
+
+''' ------------------------ sqllite3 functions ---------------------------'''
+
+class sqllite3_wrapper:
+
+    path = os.path.dirname(os.path.abspath(inspect.stack()[0][1]))
+    file_name = path+os.sep+'LibreReadings.db'
+
+    def CreateTable(self):
+        print(self.file_name)
+        conn = sqlite3.connect(self.file_name)
+        cursor=conn.cursor()
+        cursor.execute('''CREATE TABLE IF NOT EXISTS LibreReadings (
+                                    BlockBytes BLOB NOT NULL,
+                                    CaptureDateTime BIGINT,
+                                    ChecksumOk int,
+                                    DebugInfo text NOT NULL,
+                                    TomatoBatteryLife integer,
+                                    UploaderBatteryLife integer,
+                                    Uploaded int,
+                                    HwVersion int,
+                                    FwVersion int,
+                                    SensorId text,
+                                    PRIMARY KEY (CaptureDateTime, DebugInfo))''')
+        conn.commit()
+        conn.close()
+
+    def InsertReading(self, BlockBytes, CaptureDateTime, ChecksumOk, DebugInfo, TomatoBatteryLife = 50, UploaderBatteryLife = 100,
+                      Uploaded = 0, HwVersion = 1, FwVersion = 0, SensorId = "" ):
+        #expects a dict like the one created in create_object
+        conn = sqlite3.connect(self.file_name)
+        with conn:
+            cursor=conn.cursor()
+            cursor.execute("INSERT INTO LibreReadings  values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (sqlite3.Binary(BlockBytes), 
+                 CaptureDateTime,
+                 ChecksumOk,
+                 DebugInfo,
+                 TomatoBatteryLife,
+                 UploaderBatteryLife,
+                 Uploaded,
+                 HwVersion,
+                 FwVersion,
+                 SensorId))
+             
+
+    def GetLatestObjects(self, count, only_not_uploaded):
+        # gets the latest n non commited objects
+        ret = []
+        conn = sqlite3.connect(self.file_name)
+        with conn:
+            if only_not_uploaded:
+                cursor = conn.execute("SELECT * FROM LibreReadings WHERE Uploaded=:Uploaded ORDER BY CaptureDateTime DESC LIMIT :Limit", 
+                    {"Uploaded": 0, "Limit": count})
+            else:
+                cursor = conn.execute("SELECT * FROM LibreReadings ORDER BY CaptureDateTime DESC LIMIT :Limit", 
+                    {"Limit": count})
+        
+            for raw in cursor:
+                raw_dict = dict()
+                raw_dict['BlockBytes'] = raw[0]
+                raw_dict['CaptureDateTime'] = raw[1]
+                raw_dict['ChecksumOk'] = raw[2]
+                raw_dict['DebugInfo'] = raw[3]
+                raw_dict['TomatoBatteryLife'] = raw[4]
+                raw_dict['UploaderBatteryLife'] = raw[5]
+                raw_dict['Uploaded'] = raw[6]
+                raw_dict['HwVersion'] = raw[7]
+                raw_dict['FwVersion'] = raw[8]
+                raw_dict['SensorId'] = raw[9]
+                # reverse the list to get is ASC but from the end.
+                ret.insert(0,raw_dict)
+        for raw in ret:
+            print(raw)
+        return ret
+    
+    def UpdateUploaded(self, CaptureDateTime, DebugInfo):
+        conn = sqlite3.connect(self.file_name)
+        with conn:
+            cur = conn.cursor()    
+            cur.execute("UPDATE LibreReadings SET Uploaded=? WHERE CaptureDateTime=? and DebugInfo=?", (1, CaptureDateTime, DebugInfo))        
+            conn.commit()
+            print ("Number of rows updated: %d" % cur.rowcount)
+
+    def RunLocalTests(self):
+        sqw = sqllite3_wrapper ()
+        sqw.CreateTable()
+        for i in range(1, 3):
+            if not i % 1000: print(i)
+            #obj = create_object('port1', '6FNTM 54880 44800 213 -89 2')
+            sqw.InsertReading('bb', 1000 + i, 1, 'debug', 50)
+
+        print("before get")
+        lastones = sqw.GetLatestObjects(5, False)
+        for ob in lastones:
+            sqw.UpdateUploaded(ob['CaptureDateTime'], ob['DebugInfo'])
+        sys.exit(0)
+
+sqw = sqllite3_wrapper ()
+sqw.CreateTable()
+#sqw.RunLocalTests()
 
 
 class DataCollector():
@@ -71,10 +182,15 @@ class DataCollector():
         #print('real_data = ', binascii.b2a_hex(real_data))
         checksom_ok = self.VerifyChecksum(real_data)
         print('checksum_ok = ', checksom_ok)
+        
+        captured_time = int(time.time() * 1000)
+        DebugInfo = '%s %s %s' % (socket.gethostname(), time.strftime('%d-%m-%Y %H:%M:%S', time.localtime(captured_time / 1000)), 'tomato')
+        
+        sqw = sqllite3_wrapper( )
+        sqw.InsertReading(real_data, captured_time, checksom_ok, DebugInfo)
+        #????mongo_wrapper.SetEvent()
 
 
-    
-    
     # first two bytes = crc16 included in data
     def computeCRC16(self, data, start, size):
         crc = 0xffff;
@@ -95,13 +211,13 @@ class DataCollector():
 
         
     def VerifyChecksum(self, data):
-        #????????? FIX THIS
-        cheksum_ok = self.CheckCRC16(data, 0 ,24)
-        print('cheksum_ok1 = ', cheksum_ok)
-        cheksum_ok = self.CheckCRC16(data, 24 ,296)
-        print('cheksum_ok2 = ', cheksum_ok)
-        cheksum_ok = self.CheckCRC16(data, 320 ,24)
-        print('cheksum_ok3 = ', cheksum_ok)
+        cheksum_ok1 = self.CheckCRC16(data, 0 ,24)
+        print('cheksum_ok1 = ', cheksum_ok1)
+        cheksum_ok2 = self.CheckCRC16(data, 24 ,296)
+        print('cheksum_ok2 = ', cheksum_ok2)
+        cheksum_ok3 = self.CheckCRC16(data, 320 ,24)
+        print('cheksum_ok3 = ', cheksum_ok3)
+        return cheksum_ok1 & cheksum_ok2 & cheksum_ok3
 
  
 data_collector = DataCollector() 
