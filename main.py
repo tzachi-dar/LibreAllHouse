@@ -13,6 +13,22 @@ import inspect
 import threading
 import json
 import signal
+import bson
+
+
+'''------------------------------- TODO -----------------------------------'''
+# Read config from file.
+# Use standard methods for log.
+# Split to files.
+# Init flow.
+
+
+''' ------------------------ Config data ----------------------------------'''
+
+# Read from a config file.
+db_uri = 'mongodb://user:pass@ds115166.mlab.com:15166'
+db_name = 'nightscout3'
+collection_name = 'libre'
 
 ''' ------------------------ sqllite3 functions ---------------------------'''
 
@@ -73,7 +89,8 @@ class sqllite3_wrapper:
         
             for raw in cursor:
                 raw_dict = dict()
-                raw_dict['BlockBytes'] = raw[0]
+                #print(type(raw[0])) 
+                raw_dict['BlockBytes'] = bson.binary.Binary(bytes(raw[0]))
                 raw_dict['CaptureDateTime'] = raw[1]
                 raw_dict['ChecksumOk'] = raw[2]
                 raw_dict['DebugInfo'] = raw[3]
@@ -115,6 +132,88 @@ sqw = sqllite3_wrapper ()
 sqw.CreateTable()
 #sqw.RunLocalTests()
 
+
+''' ------------------------- MongoWrapper class ----------------------------------'''
+
+def log(file, string):
+    i = datetime.datetime.now()
+    now = "%s" %i 
+    print (now[:-3]+ ':  ' +string)
+    file.write(now[:-3]+ ':  ' + string)
+    file.write('\r\n')
+
+
+class MongoWrapper(threading.Thread):
+
+    event = None
+    log_file = None
+    
+
+    def __init__(self, log_file):
+        self.event = threading.Event()
+        self.log_file =log_file
+        threading.Thread.__init__(self)
+
+    def SetEvent(self):
+        self.event.set()
+
+    def run(self):
+        #This threads loop and reads data from the sql, and uploads it to the mongo DB.
+        #It starts to work based on the event or based on 1 minutes timeout.
+        log(log_file, "Starting mongo thread")
+        while True:
+            try:
+                ret = self.event.wait(1*60)
+                log(log_file, "event wait ended, ret = %s" % ret)
+                # The next line introduces many races that are only fixed by the timeout on wait.
+                self.event.clear()
+                sqw = sqllite3_wrapper ()
+                not_uploaded_readings = sqw.GetLatestObjects(12 * 8, True)
+                for reading_dict in not_uploaded_readings:
+                    MongoWrapper.write_object_to_mongo(log_file, reading_dict)
+                    sqw.UpdateUploaded(reading_dict['CaptureDateTime'], reading_dict['DebugInfo'])
+            except Exception as exception :  
+               log(log_file, 'caught exception in MongoThread, will soon continue' + str(exception) + exception.__class__.__name__)
+               time.sleep(60)
+    @staticmethod
+    def write_log_to_mongo(log_file, device_name, log_message):
+        mongo = dict()
+        captured_time = int(time.time() * 1000)
+        mongo['CaptureDateTime'] = captured_time
+        mongo['DebugMessage'] = '%s %s %s %s' % (socket.gethostname(), time.strftime('%d-%m-%Y %H:%M:%S', time.localtime(captured_time / 1000)) , device_name, log_message)
+        MongoWrapper.write_object_to_mongo(log_file, mongo)
+        log(log_file, "sent %s to mongo" % log_message)
+   
+    @staticmethod
+    def write_object_to_mongo(log_file, mongo_dict):
+        client = MongoClient(db_uri+ '/'+db_name + '?socketTimeoutMS=180000&connectTimeoutMS=60000')
+        db = client[db_name]
+        collection = db[collection_name]
+        insertion_result = collection.insert_one(mongo_dict)
+        log(log_file, "succesfully uploaded object to mongo insertion_result = %s" % insertion_result.acknowledged)
+
+log_file = open('log_hist.txt' , 'a', 1)
+
+# sleep for 30 seconds to let the system connect to the network
+# ???? time.sleep(30)
+
+#Create the sqllite table. (done above currently).
+#sqw = sqllite3_wrapper ()
+#sqw.CreateTable()
+
+
+try:
+    MongoWrapper.write_log_to_mongo(log_file, 'device_name', "starting program")
+except Exception as exception :  
+    log(log_file, 'caught exception in first write ' + str(exception) + exception.__class__.__name__)
+
+try:
+    mongo_wrapper = MongoWrapper(log_file)
+    mongo_wrapper.start()
+except Exception as exception :  
+    # This is a critical failure, we will continue going up, but in a very bad state. Consider quiting the program
+    log(log_file, 'WTF, caught exception in MongoWrapper cration ' + str(exception) + exception.__class__.__name__)               
+               
 
 class DataCollector():
     def __init__(self):
@@ -188,7 +287,7 @@ class DataCollector():
         
         sqw = sqllite3_wrapper( )
         sqw.InsertReading(real_data, captured_time, checksom_ok, DebugInfo)
-        #????mongo_wrapper.SetEvent()
+        mongo_wrapper.SetEvent()
 
 
     # first two bytes = crc16 included in data
