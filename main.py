@@ -13,7 +13,8 @@ import inspect
 import threading
 import json
 import signal
-import bson
+#import bson
+import base64
 
 
 '''------------------------------- TODO -----------------------------------'''
@@ -21,14 +22,20 @@ import bson
 # Use standard methods for log.
 # Split to files.
 # Init flow.
+# Don't send/upload data with filed checksum
+# Move to python 3, and use strong types.
+# more fields battery, fw, hw
 
 
 ''' ------------------------ Config data ----------------------------------'''
 
 # Read from a config file.
-db_uri = 'mongodb://user:pass@ds115166.mlab.com:15166'
+db_uri = 'mongodb://user:password@ds115166.mlab.com:15166'
 db_name = 'nightscout3'
 collection_name = 'libre'
+
+HOST = ''  # All interfaces
+PORT = 50005  # xdrip standard port
 
 ''' ------------------------ sqllite3 functions ---------------------------'''
 
@@ -90,7 +97,8 @@ class sqllite3_wrapper:
             for raw in cursor:
                 raw_dict = dict()
                 #print(type(raw[0])) 
-                raw_dict['BlockBytes'] = bson.binary.Binary(bytes(raw[0]))
+                #raw_dict['BlockBytes'] = bson.binary.Binary(bytes(raw[0]))
+                raw_dict['BlockBytes'] = base64.b64encode(raw[0])
                 raw_dict['CaptureDateTime'] = raw[1]
                 raw_dict['ChecksumOk'] = raw[2]
                 raw_dict['DebugInfo'] = raw[3]
@@ -194,12 +202,82 @@ class MongoWrapper(threading.Thread):
 
 log_file = open('log_hist.txt' , 'a', 1)
 
-# sleep for 30 seconds to let the system connect to the network
+# sleep for 30 seconds to let the system connect to the network (only at start of work)
 # ???? time.sleep(30)
 
 #Create the sqllite table. (done above currently).
 #sqw = sqllite3_wrapper ()
 #sqw.CreateTable()
+
+
+''' ----------------- threads that respond to tcp requests -----------------------'''
+
+def clientThread(connlocal):
+    try:
+        connlocal.settimeout(10)
+        while True:
+            data = connlocal.recv(1024)
+            reply = ''
+            if not data:
+                break
+            decoded = json.loads(data)
+            print("type decpded = %s" % type (decoded))
+            print json.dumps(decoded, sort_keys=True, indent=4)
+            if decoded['version'] != 1:
+                print("bad version %s" % decoded['version'] )
+                return
+
+            sqw = sqllite3_wrapper()
+            readings = sqw.GetLatestObjects( decoded['numberOfRecords'],False)
+            for reading_dict in reversed(readings):
+                reading_dict['RelativeTime'] = (int(time.time()*1000) ) - reading_dict['CaptureDateTime']
+                if reading_dict['RelativeTime'] < 0:
+                    continue
+                reply = reply + json.dumps(reading_dict) +"\n"
+
+            print ("reply = %s" % reply)
+            reply = reply + "\n"
+
+            connlocal.sendall(reply)
+        connlocal.close()
+
+    except Exception, e:
+        print "Exception in clientThread: ", e
+
+def CreateListeningSocket():
+    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+
+    print 'Socket created'
+
+    # Bind socket to local host and port
+
+    try:
+        s.bind((HOST, PORT))
+    except socket.error as msg:
+        print 'Bind failed. Error Code : ' + str(msg[0]) + ' Message ' + msg[1]
+        return
+
+    s.listen(10)
+    print "Waiting for connections"
+
+    while 1:
+        conn, addr = s.accept()
+        print 'Connected with ' + addr[0] + ':' + str(addr[1])
+
+        threading.Thread(target=clientThread, args=(conn,)).start()
+
+def CreateListeningSocketWrapper():
+    while 1:
+        try:
+            CreateListeningSocket()
+        except Exception as exception :  
+            #???? log(log_file, 'CreateListeningSocketWrapper caught exception in while loop' + str(exception) + exception.__class__.__name__)
+            time.sleep(60)
+
+
+''' ------------------------------------------------------------------------------'''
+
 
 
 try:
@@ -215,6 +293,14 @@ except Exception as exception :
     log(log_file, 'WTF, caught exception in MongoWrapper cration ' + str(exception) + exception.__class__.__name__)               
                
 
+# start the listener thread
+try:
+    threading.Thread(target= CreateListeningSocketWrapper).start()
+except Exception as exception :  
+    # This is a critical failure, we will continue going up, but in a very bad state. Consider quiting the program
+    log(log_file, 'WTF, caught exception in opening listening socket ' + str(exception) + exception.__class__.__name__)
+               
+               
 class DataCollector():
     def __init__(self):
         self.data_ =  ''
@@ -342,7 +428,7 @@ class MyDelegate(btle.DefaultDelegate):
 
 
 
-def foo():     
+def ReadBLEData():     
     print ("Connecting...")
     dev = btle.Peripheral("DB:23:F4:F2:86:62", 'random')
     dev.setDelegate( MyDelegate('paramsi') )
@@ -392,4 +478,13 @@ def foo():
         #print ("Light sensor raw value", binascii.b2a_hex(val), val)
         dev.waitForNotifications(1.0)
 
-foo()
+while 1:
+    try:
+        ReadBLEData()
+    except KeyboardInterrupt as keyboardInterrupt :
+        log(log_file, 'caught exception KeyboardInterrupt:' + str(keyboardInterrupt))
+        os.kill(os.getpid(), signal.SIGKILL)
+        sys.exit(0)
+    except Exception as exception :  
+        log(log_file, 'caught exception in while loop' + str(exception) + exception.__class__.__name__)
+        time.sleep(60)
