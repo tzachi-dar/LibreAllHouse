@@ -18,13 +18,16 @@ import base64
 
 
 '''------------------------------- TODO -----------------------------------'''
-# Read config from file.
+# Read configuration from file.
 # Use standard methods for log.
-# Split to files.
-# Init flow.
+# Split code to files.
+# Initialization flow.
 # Don't send/upload data with filed checksum
 # Move to python 3, and use strong types.
 # more fields battery, fw, hw
+# retry after crc errors
+# Read every 5 minutes.
+# Always catch ctrl c.
 
 
 ''' ------------------------ Config data ----------------------------------'''
@@ -82,18 +85,17 @@ class sqllite3_wrapper:
                  SensorId))
              
 
-    def GetLatestObjects(self, count, only_not_uploaded):
+    def GetLatestObjects(self, count, only_not_uploaded, only_checksum_ok = True):
         # gets the latest n non commited objects
+        
+        uploaded_max = 0 if only_not_uploaded else 2
+        checksum_min = 0 if only_checksum_ok else -1
         ret = []
         conn = sqlite3.connect(self.file_name)
         with conn:
-            if only_not_uploaded:
-                cursor = conn.execute("SELECT * FROM LibreReadings WHERE Uploaded=:Uploaded ORDER BY CaptureDateTime DESC LIMIT :Limit", 
-                    {"Uploaded": 0, "Limit": count})
-            else:
-                cursor = conn.execute("SELECT * FROM LibreReadings ORDER BY CaptureDateTime DESC LIMIT :Limit", 
-                    {"Limit": count})
-        
+            cursor = conn.execute("SELECT * FROM LibreReadings WHERE Uploaded<=:Uploaded AND ChecksumOk>:ChecksumOk ORDER BY CaptureDateTime DESC LIMIT :Limit", 
+                    {"Uploaded": uploaded_max, "ChecksumOk": checksum_min, "Limit": count})
+            
             for raw in cursor:
                 raw_dict = dict()
                 #print(type(raw[0])) 
@@ -125,14 +127,16 @@ class sqllite3_wrapper:
     def RunLocalTests(self):
         sqw = sqllite3_wrapper ()
         sqw.CreateTable()
-        for i in range(1, 3):
+        for i in range(0, 5):
             if not i % 1000: print(i)
             #obj = create_object('port1', '6FNTM 54880 44800 213 -89 2')
-            sqw.InsertReading('bb', 1000 + i, 1, 'debug', 50)
+            sqw.InsertReading(b'bb', 1000 + i, i % 2, 'debug', 50, Uploaded = i%2)
 
         print("before get")
         lastones = sqw.GetLatestObjects(5, False)
+        print("after get")
         for ob in lastones:
+            print(ob)
             sqw.UpdateUploaded(ob['CaptureDateTime'], ob['DebugInfo'])
         sys.exit(0)
 
@@ -222,7 +226,7 @@ def clientThread(connlocal):
                 break
             decoded = json.loads(data)
             print("type decpded = %s" % type (decoded))
-            print json.dumps(decoded, sort_keys=True, indent=4)
+            print (json.dumps(decoded, sort_keys=True, indent=4))
             if decoded['version'] != 1:
                 print("bad version %s" % decoded['version'] )
                 return
@@ -241,29 +245,29 @@ def clientThread(connlocal):
             connlocal.sendall(reply)
         connlocal.close()
 
-    except Exception, e:
-        print "Exception in clientThread: ", e
+    except Exception as e:
+        print ("Exception in clientThread: ", e)
 
 def CreateListeningSocket():
     s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
 
-    print 'Socket created'
+    print ('Socket created')
 
     # Bind socket to local host and port
 
     try:
         s.bind((HOST, PORT))
     except socket.error as msg:
-        print 'Bind failed. Error Code : ' + str(msg[0]) + ' Message ' + msg[1]
+        print ('Bind failed. Error Code : ' + str(msg[0]) + ' Message ' + msg[1])
         return
 
     s.listen(10)
-    print "Waiting for connections"
+    print ("Waiting for connections")
 
     while 1:
         conn, addr = s.accept()
-        print 'Connected with ' + addr[0] + ':' + str(addr[1])
+        print ('Connected with ' + addr[0] + ':' + str(addr[1]))
 
         threading.Thread(target=clientThread, args=(conn,)).start()
 
