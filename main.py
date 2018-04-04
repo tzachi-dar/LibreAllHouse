@@ -15,6 +15,7 @@ import json
 import signal
 #import bson
 import base64
+import traceback
 
 import ConfigReader
 
@@ -92,7 +93,7 @@ class sqllite3_wrapper:
                 raw_dict = dict()
                 #print(type(raw[0])) 
                 #raw_dict['BlockBytes'] = bson.binary.Binary(bytes(raw[0]))
-                raw_dict['BlockBytes'] = base64.b64encode(raw[0])
+                raw_dict['BlockBytes'] = base64.b64encode(raw[0]).decode('ascii')
                 raw_dict['CaptureDateTime'] = raw[1]
                 raw_dict['ChecksumOk'] = raw[2]
                 raw_dict['DebugInfo'] = raw[3]
@@ -216,7 +217,7 @@ def clientThread(connlocal):
             reply = ''
             if not data:
                 break
-            decoded = json.loads(data)
+            decoded = json.loads(data.decode('ascii'))
             print("type decpded = %s" % type (decoded))
             print (json.dumps(decoded, sort_keys=True, indent=4))
             if decoded['version'] != 1:
@@ -234,11 +235,13 @@ def clientThread(connlocal):
             print ("reply = %s" % reply)
             reply = reply + "\n"
 
-            connlocal.sendall(reply)
+            connlocal.sendall(bytes(reply, 'ascii'))
         connlocal.close()
 
     except Exception as e:
         print ("Exception in clientThread: ", e)
+        exc_type, exc_value, exc_traceback = sys.exc_info()
+        traceback.print_exception(exc_type, exc_value, exc_traceback)
 
 def CreateListeningSocket():
     s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -249,9 +252,10 @@ def CreateListeningSocket():
     # Bind socket to local host and port
 
     try:
-        s.bind((ConfigReader.g_config.HOST, ConfigReader.g_config.PORT))
+        print(ConfigReader.g_config.host)
+        s.bind((ConfigReader.g_config.host, ConfigReader.g_config.port))
     except socket.error as msg:
-        print ('Bind failed. Error Code : ' + str(msg[0]) + ' Message ' + msg[1])
+        print ('Bind failed. Error Code : ' + msg)
         return
 
     s.listen(10)
@@ -267,7 +271,9 @@ def CreateListeningSocketWrapper():
     while 1:
         try:
             CreateListeningSocket()
-        except Exception as exception :  
+        except Exception as exception :
+            exc_type, exc_value, exc_traceback = sys.exc_info()
+            traceback.print_exception(exc_type, exc_value, exc_traceback)
             #???? log(log_file, 'CreateListeningSocketWrapper caught exception in while loop' + str(exception) + exception.__class__.__name__)
             time.sleep(60)
 
@@ -482,9 +488,10 @@ while 1:
         os.kill(os.getpid(), signal.SIGKILL)
         sys.exit(0)
     except Exception as exception :
-        #exc_type, exc_obj, exc_tb = sys.exc_info()
-        #print ('exception happened on line  line',   exc_tb.tb_lineno)
-        log(log_file, 'caught exception in while loop: ' + str(exception) + exception.__class__.__name__  + ' line number ' + exc_tb.tb_lineno)
+        exc_type, exc_value, exc_traceback = sys.exc_info()
+        traceback.print_exception(exc_type, exc_value, exc_traceback)
+        log(log_file, 'caught exception in while loop: ' + str(exception) + exception.__class__.__name__  + 
+            repr(traceback.format_exception(exc_type, exc_value, exc_traceback)))
 
         
     time.sleep(60)

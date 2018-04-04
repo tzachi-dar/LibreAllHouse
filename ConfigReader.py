@@ -15,7 +15,7 @@ class Config:
         try:
             file = open('config.cfg')
         except OSError as e:
-            print('ERROR: Reading config file config.ini failed. Please copy config_example.ini and change the values accordingly.')
+            print('ERROR: Reading config file config.cfg failed. Please copy config_example.cfg and change the values accordingly.')
             print ('Program exiting')
             exit(1)
         config.read_file(file)
