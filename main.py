@@ -482,5 +482,9 @@ while 1:
         os.kill(os.getpid(), signal.SIGKILL)
         sys.exit(0)
     except Exception as exception :
+        #exc_type, exc_obj, exc_tb = sys.exc_info()
+        #print ('exception happened on line  line',   exc_tb.tb_lineno)
+        log(log_file, 'caught exception in while loop: ' + str(exception) + exception.__class__.__name__  + ' line number ' + exc_tb.tb_lineno)
+
         
     time.sleep(60)
