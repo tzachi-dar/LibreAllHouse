@@ -16,29 +16,21 @@ import signal
 #import bson
 import base64
 
+import ConfigReader
 
 '''------------------------------- TODO -----------------------------------'''
-# Read configuration from file.
+# Read configuration from file. [done]
 # Use standard methods for log.
 # Split code to files.
 # Initialization flow.
-# Don't send/upload data with filed checksum
-# Move to python 3, and use strong types.
+# Don't send/upload data with filed checksum [done]
+# Move to python 3. [done]
+# Use strong types.
 # more fields battery, fw, hw
 # retry after crc errors
 # Read every 5 minutes.
-# Always catch ctrl c.
+# Always catch ctrl c. [done]
 
-
-''' ------------------------ Config data ----------------------------------'''
-
-# Read from a config file.
-db_uri = 'mongodb://user:password@ds115166.mlab.com:15166'
-db_name = 'nightscout3'
-collection_name = 'libre'
-
-HOST = ''  # All interfaces
-PORT = 50005  # xdrip standard port
 
 ''' ------------------------ sqllite3 functions ---------------------------'''
 
@@ -198,9 +190,9 @@ class MongoWrapper(threading.Thread):
    
     @staticmethod
     def write_object_to_mongo(log_file, mongo_dict):
-        client = MongoClient(db_uri+ '/'+db_name + '?socketTimeoutMS=180000&connectTimeoutMS=60000')
-        db = client[db_name]
-        collection = db[collection_name]
+        client = MongoClient(ConfigReader.g_config.db_uri+ '/'+ConfigReader.g_config.db_name + '?socketTimeoutMS=180000&connectTimeoutMS=60000')
+        db = client[ConfigReader.g_config.db_name]
+        collection = db[ConfigReader.g_config.collection_name]
         insertion_result = collection.insert_one(mongo_dict)
         log(log_file, "succesfully uploaded object to mongo insertion_result = %s" % insertion_result.acknowledged)
 
@@ -257,7 +249,7 @@ def CreateListeningSocket():
     # Bind socket to local host and port
 
     try:
-        s.bind((HOST, PORT))
+        s.bind((ConfigReader.g_config.HOST, ConfigReader.g_config.PORT))
     except socket.error as msg:
         print ('Bind failed. Error Code : ' + str(msg[0]) + ' Message ' + msg[1])
         return
@@ -307,7 +299,7 @@ except Exception as exception :
                
 class DataCollector():
     def __init__(self):
-        self.data_ =  ''
+        self.data_ =  bytes()
         self.recviedEnoughData = False
         self.lastReceiveTimestamp_ = time.time()
         
@@ -344,7 +336,7 @@ class DataCollector():
         15843, 11370, 7921, 3960 ]
         
     def reinit(self):
-        self.data_ =  ''
+        self.data_ =  bytes()
         self.recviedEnoughData = False
         
         
@@ -355,7 +347,7 @@ class DataCollector():
             self.reinit()
             
         self.lastReceiveTimestamp_ = time.time()
-    
+
         self.data_ = self.data_ + new_data
         #print('total = ' ,binascii.b2a_hex(self.data_))
         self.AreWeDone()
@@ -467,7 +459,7 @@ def ReadBLEData():
     #print(str1)
     #mCharacteristicSend.write(str1)
     
-    str1 = "".join(map(chr, [240]))
+    str1 = bytes([240])
     print(str1)
     mCharacteristicSend.write(str1)
        
@@ -489,6 +481,6 @@ while 1:
         log(log_file, 'caught exception KeyboardInterrupt:' + str(keyboardInterrupt))
         os.kill(os.getpid(), signal.SIGKILL)
         sys.exit(0)
-    except Exception as exception :  
-        log(log_file, 'caught exception in while loop' + str(exception) + exception.__class__.__name__)
-        time.sleep(60)
+    except Exception as exception :
+        
+    time.sleep(60)
