@@ -1,5 +1,7 @@
 #  File for reading configuration from ini file.
 import configparser
+import os
+import inspect
 
 # Hold configuration data explictly.
 class Config:
@@ -12,10 +14,12 @@ class Config:
     def ReadConfig(self):
         
         config = configparser.ConfigParser()
+        path = os.path.dirname(os.path.abspath(inspect.stack()[0][1]))
+        file_name = path+os.sep+'config.cfg'
         try:
-            file = open('config.cfg')
+            file = open(file_name)
         except OSError as e:
-            print('ERROR: Reading config file config.cfg failed. Please copy config_example.cfg and change the values accordingly.')
+            print('ERROR: Reading config file %s failed. Please copy config_example.cfg and change the values accordingly.' % file_name)
             print ('Program exiting')
             exit(1)
         config.read_file(file)
