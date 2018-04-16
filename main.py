@@ -346,13 +346,26 @@ class DataCollector():
         self.recviedEnoughData = False
         
         
-    def AcumulateData(self, new_data):
-        if time.time() - self.lastReceiveTimestamp_ > 20:
+    def AcumulateData(self, new_data, CharacteristicSend):
+        if time.time() - self.lastReceiveTimestamp_ > 3:
             # Too much time from last time
             print('restrarting since time from last packet is ', (time.time() - self.lastReceiveTimestamp_), ' already acumulated ', len(self.data_))
             self.reinit()
             
         self.lastReceiveTimestamp_ = time.time()
+        
+        # Check if we have received a new sensor request, if yes answer it directly.
+        if len(self.data_) == 0 and len (new_data) == 1 and new_data[0] == 0x32:
+            print('Recieved request to allow new sensor - allowing it.')
+            str1 = bytes([0xd3,1])
+            CharacteristicSend.write(str1)
+            
+            # send command to start reading
+            str1 = bytes([0xf0])
+            CharacteristicSend.write(str1)
+            
+            self.reinit()
+            return
 
         self.data_ = self.data_ + new_data
         #print('total = ' ,binascii.b2a_hex(self.data_))
@@ -412,17 +425,18 @@ data_collector = DataCollector()
         
 
 class MyDelegate(btle.DefaultDelegate):
-    def __init__(self, params):
+    def __init__(self, CharacteristicSend):
         btle.DefaultDelegate.__init__(self)
         print('Init called.')
         # ... initialise here
         self.count = 0
+        self.mCharacteristicSend  = CharacteristicSend
 
     def handleNotification(self, cHandle, data):
         # ... perhaps check cHandle
         # ... process 'data'
-        #print ('notifcation calledi count = ', self.count , strftime("%Y-%m-%d %H:%M:%S", gmtime()),binascii.b2a_hex(data))
-        data_collector.AcumulateData(data)
+        #print ('notification called count = ', self.count , strftime("%Y-%m-%d %H:%M:%S", gmtime()),binascii.b2a_hex(data))
+        data_collector.AcumulateData(data, self.mCharacteristicSend)
         #print(type(data))
         self.count +=1
         if self.count % 10 == 0:
@@ -433,8 +447,7 @@ class MyDelegate(btle.DefaultDelegate):
 def ReadBLEData():     
     print ("Connecting...")
     dev = btle.Peripheral("DB:23:F4:F2:86:62", 'random')
-    dev.setDelegate( MyDelegate('paramsi') )
-     
+
     print ("Services...")
     for svc in dev.services:
         print (str(svc))
@@ -459,11 +472,8 @@ def ReadBLEData():
     bdescriptor[0].write(struct.pack('<bb', 0x01, 0x00), False)
     mCharacteristicSend = nrfGattService.getCharacteristics(NRF_UART_RX)[0]
 
-    #charaProp = nrfGattCharacteristic.
-
-    #str1 = "".join(map(chr, [209, 1]))
-    #print(str1)
-    #mCharacteristicSend.write(str1)
+    dev.setDelegate( MyDelegate(mCharacteristicSend) )
+    
     
     str1 = bytes([240])
     print(str1)
@@ -472,8 +482,6 @@ def ReadBLEData():
     time.sleep(1.0) # Allow sensor to stabilize
 
 
-    #lightSensorValue = lightService.getCharacteristics(NRF_UART_RX)[0]
-    # Read the sensor
     
     while True:
         #val = lightSensorValue.read()
