@@ -16,6 +16,7 @@ import signal
 #import bson
 import base64
 import traceback
+import logging
 
 import ConfigReader
 
@@ -30,6 +31,7 @@ import ConfigReader
 # more fields battery, fw, hw
 # retry after crc errors
 # Read every 5 minutes.
+# Allow to replace sensors. [done]
 # Always catch ctrl c. [done]
 
 
@@ -56,16 +58,20 @@ class sqllite3_wrapper:
                                     FwVersion int,
                                     SensorId text,
                                     PRIMARY KEY (CaptureDateTime, DebugInfo))''')
+        
+        if not self.DoesFieldExistInTable(cursor, 'NoSensor'):
+            cursor.execute("alter table LibreReadings add column NoSensor integer" )
+        
         conn.commit()
         conn.close()
 
     def InsertReading(self, BlockBytes, CaptureDateTime, ChecksumOk, DebugInfo, TomatoBatteryLife = 50, UploaderBatteryLife = 100,
-                      Uploaded = 0, HwVersion = 1, FwVersion = 0, SensorId = "" ):
+                      Uploaded = 0, HwVersion = 0, FwVersion = 0, SensorId = "", NoSensor = False ):
         #expects a dict like the one created in create_object
         conn = sqlite3.connect(self.file_name)
         with conn:
             cursor=conn.cursor()
-            cursor.execute("INSERT INTO LibreReadings  values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            cursor.execute("INSERT INTO LibreReadings  values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (sqlite3.Binary(BlockBytes), 
                  CaptureDateTime,
                  ChecksumOk,
@@ -75,7 +81,8 @@ class sqllite3_wrapper:
                  Uploaded,
                  HwVersion,
                  FwVersion,
-                 SensorId))
+                 SensorId,
+                 NoSensor))
              
 
     def GetLatestObjects(self, count, only_not_uploaded, only_checksum_ok = True):
@@ -103,6 +110,7 @@ class sqllite3_wrapper:
                 raw_dict['HwVersion'] = raw[7]
                 raw_dict['FwVersion'] = raw[8]
                 raw_dict['SensorId'] = raw[9]
+                raw_dict['NoSensor'] = raw[10]
                 # reverse the list to get is ASC but from the end.
                 ret.insert(0,raw_dict)
         for raw in ret:
@@ -117,6 +125,15 @@ class sqllite3_wrapper:
             conn.commit()
             print ("Number of rows updated: %d" % cur.rowcount)
 
+    def DoesFieldExistInTable(slef, cursor, field):
+        cursor.execute('PRAGMA table_info(LibreReadings)')
+        data = cursor.fetchall()
+        for d in data:
+            #print (d[0], d[1], d[2])
+            if field == d[1]:
+                return True
+        return False
+        
     def RunLocalTests(self):
         sqw = sqllite3_wrapper ()
         sqw.CreateTable()
@@ -143,7 +160,6 @@ sqw.CreateTable()
 def log(file, string):
     i = datetime.datetime.now()
     now = "%s" %i 
-    print (now[:-3]+ ':  ' +string)
     file.write(now[:-3]+ ':  ' + string)
     file.write('\r\n')
 
@@ -349,7 +365,7 @@ class DataCollector():
     def AcumulateData(self, new_data, CharacteristicSend):
         if time.time() - self.lastReceiveTimestamp_ > 3:
             # Too much time from last time
-            print('restrarting since time from last packet is ', (time.time() - self.lastReceiveTimestamp_), ' already acumulated ', len(self.data_))
+            logging.info('restarting since time from last packet is %d %s %d', (time.time() - self.lastReceiveTimestamp_), ' already acumulated ', len(self.data_))
             self.reinit()
             
         self.lastReceiveTimestamp_ = time.time()
@@ -363,6 +379,27 @@ class DataCollector():
             # send command to start reading
             str1 = bytes([0xf0])
             CharacteristicSend.write(str1)
+            
+            self.reinit()
+            return
+            
+        # Check if we have received a no sensor message.
+        if len(self.data_) == 0 and len (new_data) == 1 and new_data[0] == 0x34:
+            logging.info('Recieved no sensor event.')
+            
+            real_data = bytearray(new_data[0:1])
+            #print('real_data = ', binascii.b2a_hex(real_data))
+            
+            #checksom_ok = self.VerifyChecksum(real_data)
+            #logging.info('checksum_ok = %s' % checksom_ok)
+        
+            captured_time = int(time.time() * 1000)
+            DebugInfo = '%s %s %s' % (socket.gethostname(), time.strftime('%d-%m-%Y %H:%M:%S', time.localtime(captured_time / 1000)), 'tomato no sensor')
+        
+            sqw = sqllite3_wrapper( )
+            sqw.InsertReading(real_data, captured_time, True, DebugInfo, NoSensor = True)
+            mongo_wrapper.SetEvent()
+            
             
             self.reinit()
             return
@@ -381,7 +418,7 @@ class DataCollector():
         real_data = bytearray(self.data_[18:344+18])
         #print('real_data = ', binascii.b2a_hex(real_data))
         checksom_ok = self.VerifyChecksum(real_data)
-        print('checksum_ok = ', checksom_ok)
+        logging.info('checksum_ok = %s' % checksom_ok)
         
         captured_time = int(time.time() * 1000)
         DebugInfo = '%s %s %s' % (socket.gethostname(), time.strftime('%d-%m-%Y %H:%M:%S', time.localtime(captured_time / 1000)), 'tomato')
@@ -411,13 +448,13 @@ class DataCollector():
 
         
     def VerifyChecksum(self, data):
-        cheksum_ok1 = self.CheckCRC16(data, 0 ,24)
-        print('cheksum_ok1 = ', cheksum_ok1)
-        cheksum_ok2 = self.CheckCRC16(data, 24 ,296)
-        print('cheksum_ok2 = ', cheksum_ok2)
-        cheksum_ok3 = self.CheckCRC16(data, 320 ,24)
-        print('cheksum_ok3 = ', cheksum_ok3)
-        return cheksum_ok1 & cheksum_ok2 & cheksum_ok3
+        checksum_ok1 = self.CheckCRC16(data, 0 ,24)
+        print('checksum_ok1 = ', checksum_ok1)
+        checksum_ok2 = self.CheckCRC16(data, 24 ,296)
+        print('checksum_ok2 = ', checksum_ok2)
+        checksum_ok3 = self.CheckCRC16(data, 320 ,24)
+        print('checksum_ok3 = ', checksum_ok3)
+        return checksum_ok1 & checksum_ok2 & checksum_ok3
 
  
 data_collector = DataCollector() 
@@ -484,10 +521,12 @@ def ReadBLEData():
 
     
     while True:
-        #val = lightSensorValue.read()
-        #print ("Light sensor raw value", binascii.b2a_hex(val), val)
         dev.waitForNotifications(1.0)
 
+logging.basicConfig(level=logging.DEBUG, format='%(levelname)s %(asctime)s %(message)s')
+        
+#btle.Debugging = True
+        
 while 1:
     try:
         ReadBLEData()
@@ -495,6 +534,8 @@ while 1:
         log(log_file, 'caught exception KeyboardInterrupt:' + str(keyboardInterrupt))
         os.kill(os.getpid(), signal.SIGKILL)
         sys.exit(0)
+    except btle.BTLEException as exception:
+        logging.info('cought btle.BTLEException %s', exception.message)
     except Exception as exception :
         exc_type, exc_value, exc_traceback = sys.exc_info()
         traceback.print_exception(exc_type, exc_value, exc_traceback)
