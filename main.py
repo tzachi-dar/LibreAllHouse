@@ -17,6 +17,7 @@ import signal
 import base64
 import traceback
 import logging
+import random
 
 import ConfigReader
 
@@ -198,11 +199,11 @@ class MongoWrapper(threading.Thread):
                log(log_file, 'caught exception in MongoThread, will soon continue' + str(exception) + exception.__class__.__name__)
                time.sleep(60)
     @staticmethod
-    def write_log_to_mongo(log_file, device_name, log_message):
+    def write_log_to_mongo(log_file, log_message):
         mongo = dict()
         captured_time = int(time.time() * 1000)
         mongo['CaptureDateTime'] = captured_time
-        mongo['DebugMessage'] = '%s %s %s %s' % (socket.gethostname(), time.strftime('%d-%m-%Y %H:%M:%S', time.localtime(captured_time / 1000)) , device_name, log_message)
+        mongo['DebugMessage'] = '%s %s %s' % (socket.gethostname(), time.strftime('%d-%m-%Y %H:%M:%S', time.localtime(captured_time / 1000)) , log_message)
         MongoWrapper.write_object_to_mongo(log_file, mongo)
         log(log_file, "sent %s to mongo" % log_message)
    
@@ -300,7 +301,7 @@ def CreateListeningSocketWrapper():
 
 
 try:
-    MongoWrapper.write_log_to_mongo(log_file, 'device_name', "starting program")
+    MongoWrapper.write_log_to_mongo(log_file, "starting program")
 except Exception as exception :  
     log(log_file, 'caught exception in first write ' + str(exception) + exception.__class__.__name__)
 
@@ -321,7 +322,7 @@ except Exception as exception :
                
 
 # fields that are needed in order to ask for retries, but not more then 3 times in 5 minutes.               
-class MultipleRestarts():
+class MultipleRetries():
     def __init__(self):
         self.multyRetriesStart_ = time.time()
         self.numberOfCrcErrors_ = 0
@@ -333,20 +334,20 @@ class MultipleRestarts():
         self.NumberOfDiscnections_ = 0
 
     # returns true, if one is allowed to send again.      
-    def trySendingCrcAgain(self):
-        logging.info('trySendingCrcAgain numberOfCrcErrors_ = %d NumberOfDiscnections_ = %d', self.numberOfCrcErrors_ , self.NumberOfDiscnections_)
+    def tryAgainAlowed(self):
+        logging.info('tryAgainAlowed numberOfCrcErrors_ = %d NumberOfDiscnections_ = %d', self.numberOfCrcErrors_ , self.NumberOfDiscnections_)
         if(self.numberOfCrcErrors_ + self.NumberOfDiscnections_) < 4:
-            logging.info('We are still allowed to send ')
+            logging.info('We are still allowed to retry ')
             return True
         if time.time() - self.multyRetriesStart_ < 300:
             logging.info('We have too many failures and not enough time passed, failing request')
+            MongoWrapper.write_log_to_mongo(log_file, "Too many errors, waiting 5 minutes")
             return False
         logging.info('We have too many failures but time has passed - resetting count')
         self.reinit()
         return True
         
     def crcErrorHappened(self):
-        logging.info('trySendingCrcAgain numberOfCrcErrors_ = %d NumberOfDiscnections_ = %d', self.numberOfCrcErrors_ , self.NumberOfDiscnections_)
         self.numberOfCrcErrors_ += 1
 
                
@@ -355,7 +356,7 @@ class DataCollector():
         self.data_ =  bytes()
         self.recviedEnoughData_ = False
         self.lastReceiveTimestamp_ = time.time()
-        self.multipleRestarts_ = MultipleRestarts()
+        self.multipleRetries_ = MultipleRetries()
         
         
         self.crc16table = [
@@ -461,8 +462,8 @@ class DataCollector():
         mongo_wrapper.SetEvent()
         
         if not checksom_ok:
-            self.multipleRestarts_.crcErrorHappened()
-            if self.multipleRestarts_.trySendingCrcAgain():
+            self.multipleRetries_.crcErrorHappened()
+            if self.multipleRetries_.tryAgainAlowed():
             
                 time.sleep(5)
                 str1 = bytes([0xf0])
