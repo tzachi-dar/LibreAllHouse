@@ -159,7 +159,8 @@ sqw.CreateTable()
 
 def log(file, string):
     i = datetime.datetime.now()
-    now = "%s" %i 
+    now = "%s" %i
+    print (now[:-3]+ ':  ' +string)
     file.write(now[:-3]+ ':  ' + string)
     file.write('\r\n')
 
@@ -211,7 +212,7 @@ class MongoWrapper(threading.Thread):
         db = client[ConfigReader.g_config.db_name]
         collection = db[ConfigReader.g_config.collection_name]
         insertion_result = collection.insert_one(mongo_dict)
-        log(log_file, "succesfully uploaded object to mongo insertion_result = %s" % insertion_result.acknowledged)
+        log(log_file, "successfully uploaded object to mongo insertion_result = %s" % insertion_result.acknowledged)
 
 log_file = open('log_hist.txt' , 'a', 1)
 
@@ -318,12 +319,43 @@ except Exception as exception :
     # This is a critical failure, we will continue going up, but in a very bad state. Consider quiting the program
     log(log_file, 'WTF, caught exception in opening listening socket ' + str(exception) + exception.__class__.__name__)
                
+
+# fields that are needed in order to ask for retries, but not more then 3 times in 5 minutes.               
+class MultipleRestarts():
+    def __init__(self):
+        self.multyRetriesStart_ = time.time()
+        self.numberOfCrcErrors_ = 0
+        self.NumberOfDiscnections_ = 0
+        
+    def reinit(self):
+        self.multyRetriesStart_ = time.time()
+        self.numberOfCrcErrors_ = 0
+        self.NumberOfDiscnections_ = 0
+
+    # returns true, if one is allowed to send again.      
+    def trySendingCrcAgain(self):
+        logging.info('trySendingCrcAgain numberOfCrcErrors_ = %d NumberOfDiscnections_ = %d', self.numberOfCrcErrors_ , self.NumberOfDiscnections_)
+        if(self.numberOfCrcErrors_ + self.NumberOfDiscnections_) < 4:
+            logging.info('We are still allowed to send ')
+            return True
+        if time.time() - self.multyRetriesStart_ < 300:
+            logging.info('We have too many failures and not enough time passed, failing request')
+            return False
+        logging.info('We have too many failures but time has passed - resetting count')
+        self.reinit()
+        return True
+        
+    def crcErrorHappened(self):
+        logging.info('trySendingCrcAgain numberOfCrcErrors_ = %d NumberOfDiscnections_ = %d', self.numberOfCrcErrors_ , self.NumberOfDiscnections_)
+        self.numberOfCrcErrors_ += 1
+
                
 class DataCollector():
     def __init__(self):
         self.data_ =  bytes()
-        self.recviedEnoughData = False
+        self.recviedEnoughData_ = False
         self.lastReceiveTimestamp_ = time.time()
+        self.multipleRestarts_ = MultipleRestarts()
         
         
         self.crc16table = [
@@ -359,7 +391,8 @@ class DataCollector():
         
     def reinit(self):
         self.data_ =  bytes()
-        self.recviedEnoughData = False
+        self.recviedEnoughData_ = False
+        self.lastReceiveTimestamp_ = time.time()
         
         
     def AcumulateData(self, new_data, CharacteristicSend):
@@ -406,14 +439,14 @@ class DataCollector():
 
         self.data_ = self.data_ + new_data
         #print('total = ' ,binascii.b2a_hex(self.data_))
-        self.AreWeDone()
+        self.AreWeDone(CharacteristicSend)
         
-    def AreWeDone(self):
-        if self.recviedEnoughData:
+    def AreWeDone(self, CharacteristicSend):
+        if self.recviedEnoughData_:
             return
         if len(self.data_) < 344 + 18 + 1:
             return
-        self.recviedEnoughData = True
+        self.recviedEnoughData_ = True
         print('we have enough data len = ', len(self.data_))
         real_data = bytearray(self.data_[18:344+18])
         #print('real_data = ', binascii.b2a_hex(real_data))
@@ -426,6 +459,16 @@ class DataCollector():
         sqw = sqllite3_wrapper( )
         sqw.InsertReading(real_data, captured_time, checksom_ok, DebugInfo)
         mongo_wrapper.SetEvent()
+        
+        if not checksom_ok:
+            self.multipleRestarts_.crcErrorHappened()
+            if self.multipleRestarts_.trySendingCrcAgain():
+            
+                time.sleep(5)
+                str1 = bytes([0xf0])
+                logging.info('Sending a request for more data after send failure')
+                CharacteristicSend.write(str1)
+                
 
 
     # first two bytes = crc16 included in data
@@ -467,13 +510,13 @@ class MyDelegate(btle.DefaultDelegate):
         print('Init called.')
         # ... initialise here
         self.count = 0
-        self.mCharacteristicSend  = CharacteristicSend
+        self.CharacteristicSend_  = CharacteristicSend
 
     def handleNotification(self, cHandle, data):
         # ... perhaps check cHandle
         # ... process 'data'
         #print ('notification called count = ', self.count , strftime("%Y-%m-%d %H:%M:%S", gmtime()),binascii.b2a_hex(data))
-        data_collector.AcumulateData(data, self.mCharacteristicSend)
+        data_collector.AcumulateData(data, self.CharacteristicSend_)
         #print(type(data))
         self.count +=1
         if self.count % 10 == 0:
@@ -507,18 +550,16 @@ def ReadBLEData():
     #???nrfGattCharacteristic[0].write(struct.pack('<bb', 0x01, 0x00), False)
     bdescriptor =  nrfGattCharacteristic[0].getDescriptors(CLIENT_CHARACTERISTIC_CONFIG)
     bdescriptor[0].write(struct.pack('<bb', 0x01, 0x00), False)
-    mCharacteristicSend = nrfGattService.getCharacteristics(NRF_UART_RX)[0]
+    CharacteristicSend = nrfGattService.getCharacteristics(NRF_UART_RX)[0]
 
-    dev.setDelegate( MyDelegate(mCharacteristicSend) )
+    dev.setDelegate( MyDelegate(CharacteristicSend) )
     
     
     str1 = bytes([240])
     print(str1)
-    mCharacteristicSend.write(str1)
+    CharacteristicSend.write(str1)
        
     time.sleep(1.0) # Allow sensor to stabilize
-
-
     
     while True:
         dev.waitForNotifications(1.0)
