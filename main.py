@@ -18,6 +18,7 @@ import base64
 import traceback
 import logging
 import random
+import scan
 
 import ConfigReader
 
@@ -299,11 +300,13 @@ def CreateListeningSocketWrapper():
 ''' ------------------------------------------------------------------------------'''
 
 
+if not ConfigReader.g_config.bt_mac_addreses:
+    scan.ScanForTomatoOrDie()
 
 try:
     MongoWrapper.write_log_to_mongo(log_file, "starting program")
 except Exception as exception :  
-    log(log_file, 'caught exception in first write ' + str(exception) + exception.__class__.__name__)
+    log(log_file, 'Mongo caught exception in first write ' + str(exception) + exception.__class__.__name__)
 
 try:
     mongo_wrapper = MongoWrapper(log_file)
@@ -527,7 +530,7 @@ class MyDelegate(btle.DefaultDelegate):
 
 def ReadBLEData():     
     print ("Connecting...")
-    dev = btle.Peripheral("DB:23:F4:F2:86:62", 'random')
+    dev = btle.Peripheral(ConfigReader.g_config.bt_mac_addreses, 'random')
 
     print ("Services...")
     for svc in dev.services:
@@ -568,7 +571,7 @@ def ReadBLEData():
 logging.basicConfig(level=logging.DEBUG, format='%(levelname)s %(asctime)s %(message)s')
         
 #btle.Debugging = True
-        
+
 while 1:
     try:
         ReadBLEData()
