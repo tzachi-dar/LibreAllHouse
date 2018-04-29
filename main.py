@@ -228,6 +228,58 @@ log_file = open('log_hist.txt' , 'a', 1)
 
 ''' ----------------- threads that respond to tcp requests -----------------------'''
 
+def CreateVersion1Response(numberOfRecords, connlocal):
+    ''' This code is here mainly to support a connection from old xDrip clients on g4'''
+    reply = ''
+    sqw = sqllite3_wrapper()
+    readings = sqw.GetLatestObjects( numberOfRecords,False)
+    for reading_dict in reversed(readings):
+        reading_dict['RelativeTime'] = (int(time.time()*1000) ) - reading_dict['CaptureDateTime']
+        if reading_dict['RelativeTime'] < 0:
+            continue
+        reply = reply + json.dumps(reading_dict) +"\n"
+
+    return reply
+
+def CreateVersion2Response(decoded, connlocal):
+    ''' This code is to sens answers for the main libre protocol
+    The answer should be a json object that contains general fields, and an array
+    of json objects which are the real readings.
+
+    
+    {
+        "debug_message":"aa",
+        "last_reading":5,
+        "libre_wifi_data":[{"CaptureDateTime":5,"ChecksumOk":0...},{"ChecksumOk":0,"FwVersion":0...}],
+        "reply_version":2
+    }
+
+    '''
+
+    reply = '{\n'
+    reply += '"reply_version":2,\n'
+    reply += '"max_protocol_version":2,\n'
+    reply += '"device_type":"tomato",\n'
+    
+    reply += '"libre_wifi_data":['
+    
+    sqw = sqllite3_wrapper()
+    readings = sqw.GetLatestObjects( decoded['numberOfRecords'],False)
+    first = True
+    for reading_dict in reversed(readings):
+        if first == False:
+            reply = reply + ",\n"
+        first = False
+        reading_dict['RelativeTime'] = (int(time.time()*1000) ) - reading_dict['CaptureDateTime']
+        if reading_dict['RelativeTime'] < 0:
+            continue
+        reply = reply + json.dumps(reading_dict)
+    reply += ']'
+    reply += '}\n'
+    return reply
+    
+   
+
 def clientThread(connlocal):
     try:
         connlocal.settimeout(10)
@@ -237,24 +289,23 @@ def clientThread(connlocal):
             if not data:
                 break
             decoded = json.loads(data.decode('ascii'))
-            print("type decpded = %s" % type (decoded))
+            print("type decoded = %s" % type (decoded))
             print (json.dumps(decoded, sort_keys=True, indent=4))
-            if decoded['version'] != 1:
-                print("bad version %s" % decoded['version'] )
-                return
+            if decoded['version'] == 1:
+                print("old version %s" % decoded['version'] )
+                reply = CreateVersion1Response(decoded['numberOfRecords'], connlocal)
 
-            sqw = sqllite3_wrapper()
-            readings = sqw.GetLatestObjects( decoded['numberOfRecords'],False)
-            for reading_dict in reversed(readings):
-                reading_dict['RelativeTime'] = (int(time.time()*1000) ) - reading_dict['CaptureDateTime']
-                if reading_dict['RelativeTime'] < 0:
-                    continue
-                reply = reply + json.dumps(reading_dict) +"\n"
-
+            if decoded['version'] == 2:
+                print("new version %s" % decoded['version'] )
+                reply = CreateVersion2Response(decoded, connlocal)
+            
             print ("reply = %s" % reply)
+            # We should probably call connlocal.shutdown(socket.SHUT_WR), but for historical reasons, 
+            # we send an empty string, and the other side will close the connection.
             reply = reply + "\n"
 
             connlocal.sendall(bytes(reply, 'ascii'))
+            
         connlocal.close()
 
     except Exception as e:
