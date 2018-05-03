@@ -30,8 +30,8 @@ import ConfigReader
 # Don't send/upload data with filed checksum [done]
 # Move to python 3. [done]
 # Use strong types.
-# more fields battery, fw, hw
-# retry after crc errors
+# more fields battery, fw, hw [done]
+# retry after crc errors [done]
 # Read every 5 minutes.
 # Allow to replace sensors. [done]
 # Always catch ctrl c. [done]
@@ -56,8 +56,8 @@ class sqllite3_wrapper:
                                     TomatoBatteryLife integer,
                                     UploaderBatteryLife integer,
                                     Uploaded int,
-                                    HwVersion int,
-                                    FwVersion int,
+                                    HwVersion text,
+                                    FwVersion text,
                                     SensorId text,
                                     PRIMARY KEY (CaptureDateTime, DebugInfo))''')
         
@@ -508,11 +508,38 @@ class DataCollector():
         checksom_ok = self.VerifyChecksum(real_data)
         logging.info('checksum_ok = %s' % checksom_ok)
         
+        # Do validation checks:
+        # 1) Start byte = 0x28
+        # 2) End byte = 0x29
+        # 3) len = len
+        print('start byte = ', self.data_[0])
+        print('end byte = ', self.data_[len(self.data_ )-1])
+        print('len = ', self.data_[1] * 256 + self.data_[2])
+        print('battery = ', self.data_[13])
+        FwVersion = format(self.data_[14] * 256 + self.data_[15],'x')
+        print(type(FwVersion))
+        HwVersion = format(self.data_[16] * 256 + self.data_[17],'x')
+        print('fw version = ',  FwVersion)
+        print('hw version = ',  HwVersion)
+        
+        if self.data_[0] != 0x28:
+            print('bad start byte ', self.data_[0])
+            checksom_ok = false
+
+        if self.data_[len(self.data_ )-1] != 0x29:
+            print('bad end byte ', self.data_[len(self.data_ )-1])
+            checksom_ok = false
+            
+        if len(self.data_) != self.data_[1] * 256 + self.data_[2]:
+            print('bad length of buffer', self.data_[1] * 256 + self.data_[2] )
+            checksom_ok = false
+        
         captured_time = int(time.time() * 1000)
         DebugInfo = '%s %s %s' % (socket.gethostname(), time.strftime('%d-%m-%Y %H:%M:%S', time.localtime(captured_time / 1000)), 'tomato')
         
         sqw = sqllite3_wrapper( )
-        sqw.InsertReading(real_data, captured_time, checksom_ok, DebugInfo)
+        sqw.InsertReading(real_data, captured_time, checksom_ok, DebugInfo, TomatoBatteryLife = int(self.data_[13]), 
+                          FwVersion = FwVersion, HwVersion = HwVersion)
         mongo_wrapper.SetEvent()
         
         if not checksom_ok:
