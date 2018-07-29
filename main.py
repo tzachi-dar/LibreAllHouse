@@ -521,6 +521,8 @@ class DataCollector():
         HwVersion = format(self.data_[16] * 256 + self.data_[17],'x')
         print('fw version = ',  FwVersion)
         print('hw version = ',  HwVersion)
+        SensorId = self.decodeSerialNumber(self.data_[5:13])
+        print('sensor serial number', SensorId)
         
         if self.data_[0] != 0x28:
             print('bad start byte ', self.data_[0])
@@ -539,7 +541,7 @@ class DataCollector():
         
         sqw = sqllite3_wrapper( )
         sqw.InsertReading(real_data, captured_time, checksom_ok, DebugInfo, TomatoBatteryLife = int(self.data_[13]), 
-                          FwVersion = FwVersion, HwVersion = HwVersion)
+                          FwVersion = FwVersion, HwVersion = HwVersion, SensorId = SensorId)
         mongo_wrapper.SetEvent()
         
         if not checksom_ok:
@@ -581,7 +583,45 @@ class DataCollector():
         print('checksum_ok3 = ', checksum_ok3)
         return checksum_ok1 & checksum_ok2 & checksum_ok3
 
- 
+    # Input is 8 bytes
+    def decodeSerialNumber(self, input):
+        lookupTable = [
+                        "0", "1", "2", "3", "4", "5", "6", "7", "8", "9",
+                        "A", "C", "D", "E", "F", "G", "H", "J", "K", "L",
+                        "M", "N", "P", "Q", "R", "T", "U", "V", "W", "X",
+                        "Y", "Z"
+                ]
+                
+        uuidShort = [0, 0, 0, 0, 0, 0, 0, 0]
+
+        for i in range(2,8):
+            uuidShort[i - 2] = input[7 - i]
+        uuidShort[6] = 0x00
+        uuidShort[7] = 0x00
+
+        #print("uuidShort", uuidShort)
+
+        binary = ""
+        for i in range(0,8):
+            binS =  (format(uuidShort[i], '08b'))# str(uuidShort[i]).zfill(8) #String.format("%8s", Integer.toBinaryString(uuidShort[i] & 0xFF)).replace(' ', '0');
+            binary += binS;
+
+        #print(binary)
+
+        v = "0"
+        pozS = [0, 0, 0, 0, 0]
+        for i in range(0, 10): 
+            for k in range(0, 5):
+                pozS[k] = binary[(5 * i) + k]
+            #print("type pos", type(pozS[0]))
+            value = (ord(pozS[0]) - ord('0')) * 16 + (ord(pozS[1]) - ord('0')) * 8 + (ord(pozS[2]) - ord('0')) * 4 + (ord(pozS[3]) - ord('0')) * 2 + (ord(pozS[4]) - ord('0')) * 1
+            v += lookupTable[value]
+            #print(value)
+
+        #print("Sensor serial number is ", v)
+        return v
+
+
 data_collector = DataCollector() 
         
         
