@@ -325,7 +325,8 @@ def CreateListeningSocket():
         print(ConfigReader.g_config.host)
         s.bind((ConfigReader.g_config.host, ConfigReader.g_config.port))
     except socket.error as msg:
-        print ('Bind failed. Error Code : ' + msg)
+        print ('Bind failed. Error Code : ' +str(msg))
+        time.sleep(60)
         return
 
     s.listen(10)
@@ -375,6 +376,18 @@ except Exception as exception :
     log(log_file, 'WTF, caught exception in opening listening socket ' + str(exception) + exception.__class__.__name__)
                
 
+# This is a wrapper object around bool. It is used to allow returning a boolean object when it is needed.
+class CBoolean():
+    def __init__(self):
+        self.val = False;
+        
+    def set(self, val):
+        self.val = val
+        
+    def get(self):
+        return self.val
+        
+        
 # fields that are needed in order to ask for retries, but not more then 3 times in 5 minutes.               
 class MultipleRetries():
     def __init__(self):
@@ -411,6 +424,7 @@ class DataCollector():
         self.recviedEnoughData_ = False
         self.lastReceiveTimestamp_ = time.time()
         self.multipleRetries_ = MultipleRetries()
+        self.numberOfErrors_ = 0 # used to disconnect from BT device in the case of 3 errors
         
         
         self.crc16table = [
@@ -449,7 +463,11 @@ class DataCollector():
         self.recviedEnoughData_ = False
         self.lastReceiveTimestamp_ = time.time()
         
+    def tooManyErrors(self):
+        logging.info('number of concurrent errors %d' , self.numberOfErrors_)
+        return self.numberOfErrors_ > 2
         
+    # returns true if the connection should be disconnected.    
     def AcumulateData(self, new_data, CharacteristicSend):
         if time.time() - self.lastReceiveTimestamp_ > 3:
             # Too much time from last time
@@ -463,13 +481,17 @@ class DataCollector():
             print('Recieved request to allow new sensor - allowing it.')
             str1 = bytes([0xd3,1])
             CharacteristicSend.write(str1)
+
+            # ask to do a reading every 5 minutes
+            str1 = bytes([0xd1, 5])
+            CharacteristicSend.write(str1)
             
             # send command to start reading
             str1 = bytes([0xf0])
             CharacteristicSend.write(str1)
             
             self.reinit()
-            return
+            return False
             
         # Check if we have received a no sensor message.
         if len(self.data_) == 0 and len (new_data) == 1 and new_data[0] == 0x34:
@@ -488,14 +510,15 @@ class DataCollector():
             sqw.InsertReading(real_data, captured_time, True, DebugInfo, NoSensor = True)
             mongo_wrapper.SetEvent()
             
-            
             self.reinit()
-            return
+            self.numberOfErrors_ += 1
+            return self.tooManyErrors()
 
         self.data_ = self.data_ + new_data
         #print('total = ' ,binascii.b2a_hex(self.data_))
         self.AreWeDone(CharacteristicSend)
-        
+        return self.tooManyErrors()
+    
     def AreWeDone(self, CharacteristicSend):
         if self.recviedEnoughData_:
             return
@@ -526,15 +549,15 @@ class DataCollector():
         
         if self.data_[0] != 0x28:
             print('bad start byte ', self.data_[0])
-            checksom_ok = false
+            checksom_ok = False
 
         if self.data_[len(self.data_ )-1] != 0x29:
             print('bad end byte ', self.data_[len(self.data_ )-1])
-            checksom_ok = false
+            checksom_ok = False
             
         if len(self.data_) != self.data_[1] * 256 + self.data_[2]:
             print('bad length of buffer', self.data_[1] * 256 + self.data_[2] )
-            checksom_ok = false
+            checksom_ok = False
         
         captured_time = int(time.time() * 1000)
         DebugInfo = '%s %s %s' % (socket.gethostname(), time.strftime('%d-%m-%Y %H:%M:%S', time.localtime(captured_time / 1000)), 'tomato')
@@ -543,7 +566,7 @@ class DataCollector():
         sqw.InsertReading(real_data, captured_time, checksom_ok, DebugInfo, TomatoBatteryLife = int(self.data_[13]), 
                           FwVersion = FwVersion, HwVersion = HwVersion, SensorId = SensorId)
         mongo_wrapper.SetEvent()
-        
+
         if not checksom_ok:
             self.multipleRetries_.crcErrorHappened()
             if self.multipleRetries_.tryAgainAlowed():
@@ -552,7 +575,10 @@ class DataCollector():
                 str1 = bytes([0xf0])
                 logging.info('Sending a request for more data after send failure')
                 CharacteristicSend.write(str1)
-                
+            else:
+                self.numberOfErrors_ += 1 
+        else:
+            self.numberOfErrors_ = 0
 
 
     # first two bytes = crc16 included in data
@@ -622,23 +648,26 @@ class DataCollector():
         return v
 
 
-data_collector = DataCollector() 
         
         
 
 class MyDelegate(btle.DefaultDelegate):
-    def __init__(self, CharacteristicSend):
+    def __init__(self, CharacteristicSend, should_disconnect):
         btle.DefaultDelegate.__init__(self)
         print('Init called.')
         # ... initialise here
         self.count = 0
         self.CharacteristicSend_  = CharacteristicSend
+        self.data_collector_ = DataCollector() 
+        self.should_disconnect_ = should_disconnect
 
     def handleNotification(self, cHandle, data):
         # ... perhaps check cHandle
         # ... process 'data'
         #print ('notification called count = ', self.count , strftime("%Y-%m-%d %H:%M:%S", gmtime()),binascii.b2a_hex(data))
-        data_collector.AcumulateData(data, self.CharacteristicSend_)
+        should_disconnect = self.data_collector_.AcumulateData(data, self.CharacteristicSend_)
+        print('should_disconnect = ', should_disconnect)
+        self.should_disconnect_.set(should_disconnect)
         #print(type(data))
         self.count +=1
         if self.count % 10 == 0:
@@ -674,7 +703,8 @@ def ReadBLEData():
     bdescriptor[0].write(struct.pack('<bb', 0x01, 0x00), False)
     CharacteristicSend = nrfGattService.getCharacteristics(NRF_UART_RX)[0]
 
-    dev.setDelegate( MyDelegate(CharacteristicSend) )
+    should_disconnect = CBoolean()
+    dev.setDelegate( MyDelegate(CharacteristicSend, should_disconnect) )
     
     
     str1 = bytes([240])
@@ -685,6 +715,10 @@ def ReadBLEData():
     
     while True:
         dev.waitForNotifications(1.0)
+        if should_disconnect.get():
+            logging.info( 'disconnecting because of too many errors')
+            dev.disconnect()
+            raise Exception('getting out because of too many errors')
 
 logging.basicConfig(level=logging.DEBUG, format='%(levelname)s %(asctime)s %(message)s')
         
