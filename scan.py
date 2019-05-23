@@ -24,7 +24,9 @@ def ScanForTomatoOrDie():
     print('devices found:')
     for device in devices:
         name = device.getValueText(9)
-        print (device.addr,  device.addrType, name)
+        print (device.addr,  device.addrType, name, device.rssi)
+        if not name:
+            continue
         if 'miaomiao' in name:
             found_devices +=1
             tomato_device = device
