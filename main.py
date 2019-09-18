@@ -210,7 +210,7 @@ class MongoWrapper(threading.Thread):
    
     @staticmethod
     def write_object_to_mongo(log_file, mongo_dict):
-        client = MongoClient(ConfigReader.g_config.db_uri+ '/'+ConfigReader.g_config.db_name + '?socketTimeoutMS=180000&connectTimeoutMS=60000')
+        client = MongoClient(ConfigReader.g_config.db_uri+ '/'+ConfigReader.g_config.db_name + '?socketTimeoutMS=180000&connectTimeoutMS=60000&retryWrites=false')
         db = client[ConfigReader.g_config.db_name]
         collection = db[ConfigReader.g_config.collection_name]
         insertion_result = collection.insert_one(mongo_dict)
@@ -425,6 +425,10 @@ class DataCollector():
         self.lastReceiveTimestamp_ = time.time()
         self.multipleRetries_ = MultipleRetries()
         self.numberOfErrors_ = 0 # used to disconnect from BT device in the case of 3 errors
+        self.bubble_fw = 0
+        self.bubble_hw = 0
+        self.bubble_sn = ''
+        self.bubble_battary = 0
         
         
         self.crc16table = [
@@ -462,13 +466,78 @@ class DataCollector():
         self.data_ =  bytes()
         self.recviedEnoughData_ = False
         self.lastReceiveTimestamp_ = time.time()
+        self.bubble_fw = 0
+        self.bubble_hw = 0
+        self.bubble_sn = ''
+        self.bubble_battary = 0
         
     def tooManyErrors(self):
         logging.info('number of concurrent errors %d' , self.numberOfErrors_)
         return self.numberOfErrors_ > 2
+
+    def getBubbleRespons(self):
+        return struct.pack('<bbbbbb', 0x02, 0x01, 0x00, 0x00, 0x00, 0x2B,)
+
+    # returns true if the connection should be disconnected.    
+    # The bubble version.
+    def AcumulateData(self, new_data, CharacteristicSend):
+        if time.time() - self.lastReceiveTimestamp_ > 3:
+            # Too much time from last time
+            logging.info('restarting since time from last packet is %d %s %d', (time.time() - self.lastReceiveTimestamp_), ' already acumulated ', len(self.data_))
+            self.reinit()
+        
+        if len (new_data) == 0:
+            logging.info('Recieved empty buffer ignoring')
+            return False
+
+        self.lastReceiveTimestamp_ = time.time()
+        first = new_data[0]
+        # Get battery and hw.
+        if first == 0x80:
+            self.reinit()
+            self.bubble_fw = new_data[1]
+            self.bubble_hw = new_data[2]
+            self.bubble_battary = new_data[4]
+
+            CharacteristicSend.write(self.getBubbleRespons())
+            return False
+        
+        if first == 0xc0:
+            #get the sensor s/n
+            self.bubble_sn = self.decodeSerialNumber(new_data[2:10])
+            return False
+
+        if first == 0x82:
+            # This is a normal data buffer
+            self.data_ = self.data_ + new_data[4:20]
+            #print('total = ' ,binascii.b2a_hex(self.data_))
+            self.AreWeDoneBubble(CharacteristicSend)
+            return False
+
+        if first == 0xBF:
+            # This is the no sensor case
+            logging.info('Recieved no sensor event.')
+            
+            real_data = bytearray(new_data[0:1])
+            #print('real_data = ', binascii.b2a_hex(real_data))
+            
+            captured_time = int(time.time() * 1000)
+            DebugInfo = '%s %s %s' % (socket.gethostname(), time.strftime('%d-%m-%Y %H:%M:%S', time.localtime(captured_time / 1000)), 'tomato no sensor')
+        
+            sqw = sqllite3_wrapper( )
+            sqw.InsertReading(real_data, captured_time, True, DebugInfo, NoSensor = True)
+            mongo_wrapper.SetEvent()
+            
+            self.reinit()
+            self.numberOfErrors_ += 1
+            return False
+
+        logging.error('revieved unknown message %d', first)            
+        return self.tooManyErrors()
+
         
     # returns true if the connection should be disconnected.    
-    def AcumulateData(self, new_data, CharacteristicSend):
+    def AcumulateDataMM(self, new_data, CharacteristicSend):
         if time.time() - self.lastReceiveTimestamp_ > 3:
             # Too much time from last time
             logging.info('restarting since time from last packet is %d %s %d', (time.time() - self.lastReceiveTimestamp_), ' already acumulated ', len(self.data_))
@@ -519,6 +588,29 @@ class DataCollector():
         self.AreWeDone(CharacteristicSend)
         return self.tooManyErrors()
     
+    def AreWeDoneBubble(self, CharacteristicSend):
+        if self.recviedEnoughData_:
+            return
+        if len(self.data_) < 344 + 8:
+            return
+        self.recviedEnoughData_ = True
+        print('we have enough data len = ', len(self.data_))
+        real_data = bytearray(self.data_[0:344])
+        #print('real_data = ', binascii.b2a_hex(real_data))
+        checksom_ok = self.VerifyChecksum(real_data)
+        logging.info('checksum_ok = %s' % checksom_ok)
+        
+        # Do validation checks:
+        # 1) len = len
+        print('battery = ', self.bubble_battary)
+        print('fw version = ',  self.bubble_fw)
+        print('hw version = ',  self.bubble_hw)
+        print('sensor serial number', self.bubble_sn)
+        
+        self.WriteToMongo('bubble', real_data, checksom_ok, self.bubble_battary,
+                         self.bubble_fw, self.bubble_hw , self.bubble_sn, CharacteristicSend)
+
+
     def AreWeDone(self, CharacteristicSend):
         if self.recviedEnoughData_:
             return
@@ -559,11 +651,20 @@ class DataCollector():
             print('bad length of buffer', self.data_[1] * 256 + self.data_[2] )
             checksom_ok = False
         
+        battery = self.data_[13]
+        self.WriteToMongo('tomato', real_data, checksom_ok, battery,
+                         FwVersion, HwVersion , SensorId, CharacteristicSend)
+
+
+
+    def WriteToMongo(self, device_name, real_data, checksom_ok, battery_life,
+                     FwVersion, HwVersion , SensorId, CharacteristicSend): 
+
         captured_time = int(time.time() * 1000)
-        DebugInfo = '%s %s %s' % (socket.gethostname(), time.strftime('%d-%m-%Y %H:%M:%S', time.localtime(captured_time / 1000)), 'tomato')
+        DebugInfo = '%s %s %s' % (socket.gethostname(), time.strftime('%d-%m-%Y %H:%M:%S', time.localtime(captured_time / 1000)), device_name)
         
         sqw = sqllite3_wrapper( )
-        sqw.InsertReading(real_data, captured_time, checksom_ok, DebugInfo, TomatoBatteryLife = int(self.data_[13]), 
+        sqw.InsertReading(real_data, captured_time, checksom_ok, DebugInfo, TomatoBatteryLife = battery_life, 
                           FwVersion = FwVersion, HwVersion = HwVersion, SensorId = SensorId)
         mongo_wrapper.SetEvent()
 
@@ -573,8 +674,9 @@ class DataCollector():
             
                 time.sleep(5)
                 str1 = bytes([0xf0])
+                # ??? Only for miaomiao
                 logging.info('Sending a request for more data after send failure')
-                CharacteristicSend.write(str1)
+                #CharacteristicSend.write(str1)
             else:
                 self.numberOfErrors_ += 1 
         else:
@@ -664,7 +766,7 @@ class MyDelegate(btle.DefaultDelegate):
     def handleNotification(self, cHandle, data):
         # ... perhaps check cHandle
         # ... process 'data'
-        #print ('notification called count = ', self.count , strftime("%Y-%m-%d %H:%M:%S", gmtime()),binascii.b2a_hex(data))
+        print ('notification called count = ', self.count , strftime("%Y-%m-%d %H:%M:%S", gmtime()),binascii.b2a_hex(data))
         should_disconnect = self.data_collector_.AcumulateData(data, self.CharacteristicSend_)
         print('should_disconnect = ', should_disconnect)
         self.should_disconnect_.set(should_disconnect)
@@ -676,8 +778,10 @@ class MyDelegate(btle.DefaultDelegate):
 
 
 def ReadBLEData():     
-    print ("Connecting...")
+    logging.info("Connecting...")
+
     dev = btle.Peripheral(ConfigReader.g_config.bt_mac_addreses, 'random')
+    #dev.setMTU(20)
 
     print ("Services...")
     for svc in dev.services:
@@ -707,7 +811,8 @@ def ReadBLEData():
     dev.setDelegate( MyDelegate(CharacteristicSend, should_disconnect) )
     
     
-    str1 = bytes([240])
+    #str1 = bytes([240]) for mm
+    str1 = struct.pack('<bbb', 0x00, 0x01, 0x05)
     print(str1)
     CharacteristicSend.write(str1)
        
