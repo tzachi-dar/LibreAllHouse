@@ -379,14 +379,26 @@ except Exception as exception :
 # This is a wrapper object around bool. It is used to allow returning a boolean object when it is needed.
 class CBoolean():
     def __init__(self):
-        self.val = False;
+        self.val = False
         
     def set(self, val):
         self.val = val
         
     def get(self):
         return self.val
+
+# A class for storing the last good connection time in order to allow
+# disconnection, in the case of no error.
+class CLastGoodTime():
+    def __init__(self):
+        self.last_good_time = time.time()
+
+    def set(self, last_good_time):
+        self.last_good_time = last_good_time
         
+    def get(self):
+        return self.last_good_time
+       
         
 # fields that are needed in order to ask for retries, but not more then 3 times in 5 minutes.               
 class MultipleRetries():
@@ -429,6 +441,7 @@ class DataCollector():
         self.bubble_hw = 0
         self.bubble_sn = ''
         self.bubble_battary = 0
+        self.bubble_last_good_time = time.time()
         
         
         self.crc16table = [
@@ -480,6 +493,7 @@ class DataCollector():
 
     # returns true if the connection should be disconnected.    
     # The bubble version.
+    # returns should_disconct bubble_last_good_time
     def AcumulateData(self, new_data, CharacteristicSend):
         if time.time() - self.lastReceiveTimestamp_ > 3:
             # Too much time from last time
@@ -488,7 +502,7 @@ class DataCollector():
         
         if len (new_data) == 0:
             logging.info('Recieved empty buffer ignoring')
-            return False
+            return False, self.bubble_last_good_time
 
         self.lastReceiveTimestamp_ = time.time()
         first = new_data[0]
@@ -500,19 +514,19 @@ class DataCollector():
             self.bubble_battary = new_data[4]
 
             CharacteristicSend.write(self.getBubbleRespons())
-            return False
+            return False, self.bubble_last_good_time
         
         if first == 0xc0:
             #get the sensor s/n
             self.bubble_sn = self.decodeSerialNumber(new_data[2:10])
-            return False
+            return False, self.bubble_last_good_time
 
         if first == 0x82:
             # This is a normal data buffer
             self.data_ = self.data_ + new_data[4:20]
             #print('total = ' ,binascii.b2a_hex(self.data_))
             self.AreWeDoneBubble(CharacteristicSend)
-            return False
+            return False, self.bubble_last_good_time
 
         if first == 0xBF:
             # This is the no sensor case
@@ -530,7 +544,7 @@ class DataCollector():
             
             self.reinit()
             self.numberOfErrors_ += 1
-            return False
+            return False, self.bubble_last_good_time
 
         logging.error('revieved unknown message %d', first)            
         return self.tooManyErrors()
@@ -606,11 +620,13 @@ class DataCollector():
         print('fw version = ',  self.bubble_fw)
         print('hw version = ',  self.bubble_hw)
         print('sensor serial number', self.bubble_sn)
+        if checksom_ok:
+            self.bubble_last_good_time = time.time()
         
-        self.WriteToMongo('bubble', real_data, checksom_ok, self.bubble_battary,
+        self.WriteToDb('bubble', real_data, checksom_ok, self.bubble_battary,
                          self.bubble_fw, self.bubble_hw , self.bubble_sn, CharacteristicSend)
 
-
+    #The mm version
     def AreWeDone(self, CharacteristicSend):
         if self.recviedEnoughData_:
             return
@@ -652,12 +668,12 @@ class DataCollector():
             checksom_ok = False
         
         battery = self.data_[13]
-        self.WriteToMongo('tomato', real_data, checksom_ok, battery,
+        self.WriteToDb('tomato', real_data, checksom_ok, battery,
                          FwVersion, HwVersion , SensorId, CharacteristicSend)
 
 
 
-    def WriteToMongo(self, device_name, real_data, checksom_ok, battery_life,
+    def WriteToDb(self, device_name, real_data, checksom_ok, battery_life,
                      FwVersion, HwVersion , SensorId, CharacteristicSend): 
 
         captured_time = int(time.time() * 1000)
@@ -754,7 +770,7 @@ class DataCollector():
         
 
 class MyDelegate(btle.DefaultDelegate):
-    def __init__(self, CharacteristicSend, should_disconnect):
+    def __init__(self, CharacteristicSend, should_disconnect, last_good_time):
         btle.DefaultDelegate.__init__(self)
         print('Init called.')
         # ... initialise here
@@ -762,14 +778,16 @@ class MyDelegate(btle.DefaultDelegate):
         self.CharacteristicSend_  = CharacteristicSend
         self.data_collector_ = DataCollector() 
         self.should_disconnect_ = should_disconnect
+        self.last_good_time_ = last_good_time
 
     def handleNotification(self, cHandle, data):
         # ... perhaps check cHandle
         # ... process 'data'
         print ('notification called count = ', self.count , strftime("%Y-%m-%d %H:%M:%S", gmtime()),binascii.b2a_hex(data))
-        should_disconnect = self.data_collector_.AcumulateData(data, self.CharacteristicSend_)
-        print('should_disconnect = ', should_disconnect)
+        should_disconnect , last_good_time = self.data_collector_.AcumulateData(data, self.CharacteristicSend_)
+        print('should_disconnect = ', should_disconnect, 'last_good_time', last_good_time)
         self.should_disconnect_.set(should_disconnect)
+        self.last_good_time_.set(last_good_time)
         #print(type(data))
         self.count +=1
         if self.count % 10 == 0:
@@ -808,7 +826,8 @@ def ReadBLEData():
     CharacteristicSend = nrfGattService.getCharacteristics(NRF_UART_RX)[0]
 
     should_disconnect = CBoolean()
-    dev.setDelegate( MyDelegate(CharacteristicSend, should_disconnect) )
+    last_good_time = CLastGoodTime()
+    dev.setDelegate( MyDelegate(CharacteristicSend, should_disconnect, last_good_time) )
     
     
     #str1 = bytes([240]) for mm
@@ -824,6 +843,12 @@ def ReadBLEData():
             logging.info( 'disconnecting because of too many errors')
             dev.disconnect()
             raise Exception('getting out because of too many errors')
+        print('time from last reading', time.time() - last_good_time.get())
+        if time.time() - last_good_time.get() > 305:
+            logging.info( 'disconnecting because too much time has passed')
+            dev.disconnect()
+            raise Exception('getting out because no good data in more than 5 minutes')
+
 
 logging.basicConfig(level=logging.DEBUG, format='%(levelname)s %(asctime)s %(message)s')
         
