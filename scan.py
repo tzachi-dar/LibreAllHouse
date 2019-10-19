@@ -39,6 +39,7 @@ def ScanForTomatoOrDie():
         print ('More then one device found, Program exiting.')
         sys.exit(0)
     
+    device = tomato_device
     print('Will use device ', device.getValueText(9), device.addr)
     ConfigReader.g_config.UpdateSection('BTDevice', 'bt_mac_address', device.addr)  
         
