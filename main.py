@@ -210,11 +210,13 @@ class MongoWrapper(threading.Thread):
    
     @staticmethod
     def write_object_to_mongo(log_file, mongo_dict):
-        client = MongoClient(ConfigReader.g_config.db_uri+ '/'+ConfigReader.g_config.db_name + '?socketTimeoutMS=180000&connectTimeoutMS=60000')
+        client = MongoClient(ConfigReader.g_config.db_uri + '?retryWrites=true&w=majority')
         db = client[ConfigReader.g_config.db_name]
         collection = db[ConfigReader.g_config.collection_name]
         insertion_result = collection.insert_one(mongo_dict)
         log(log_file, "successfully uploaded object to mongo insertion_result = %s" % insertion_result.acknowledged)
+        client.close()
+
 
 log_file = open('log_hist.txt' , 'a', 1)
 
