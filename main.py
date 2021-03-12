@@ -528,15 +528,15 @@ class DataCollector():
         
         if self.data_[0] != 0x28:
             print('bad start byte ', self.data_[0])
-            checksom_ok = false
+            checksom_ok = False
 
         if self.data_[len(self.data_ )-1] != 0x29:
             print('bad end byte ', self.data_[len(self.data_ )-1])
-            checksom_ok = false
+            checksom_ok = False
             
         if len(self.data_) != self.data_[1] * 256 + self.data_[2]:
             print('bad length of buffer', self.data_[1] * 256 + self.data_[2] )
-            checksom_ok = false
+            checksom_ok = False
         
         captured_time = int(time.time() * 1000)
         DebugInfo = '%s %s %s' % (socket.gethostname(), time.strftime('%d-%m-%Y %H:%M:%S', time.localtime(captured_time / 1000)), 'tomato')
@@ -690,7 +690,7 @@ def ReadBLEData():
 
 logging.basicConfig(level=logging.DEBUG, format='%(levelname)s %(asctime)s %(message)s')
         
-#btle.Debugging = True
+btle.Debugging = True
 
 while 1:
     try:
