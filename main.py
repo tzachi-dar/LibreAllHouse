@@ -690,7 +690,7 @@ def ReadBLEData():
 
 logging.basicConfig(level=logging.DEBUG, format='%(levelname)s %(asctime)s %(message)s')
         
-btle.Debugging = True
+#btle.Debugging = True
 
 while 1:
     try:
