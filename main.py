@@ -21,6 +21,8 @@ import random
 import scan
 
 import ConfigReader
+import requests
+import hashlib
 
 '''------------------------------- TODO -----------------------------------'''
 # Read configuration from file. [done]
@@ -87,7 +89,7 @@ class sqllite3_wrapper:
                  NoSensor))
              
 
-    def GetLatestObjects(self, count, only_not_uploaded, only_checksum_ok = True):
+    def GetLatestObjects(self, count, only_not_uploaded, only_checksum_ok = False):
         # gets the latest n non commited objects
         
         uploaded_max = 0 if only_not_uploaded else 2
@@ -184,6 +186,9 @@ class MongoWrapper(threading.Thread):
     def run(self):
         #This threads loop and reads data from the sql, and uploads it to the mongo DB.
         #It starts to work based on the event or based on 1 minutes timeout.
+        if not ConfigReader.g_config.db_uri:
+             print('no config for mongo. Exiting')
+             return
         log(log_file, "Starting mongo thread")
         while True:
             try:
@@ -327,7 +332,8 @@ def CreateListeningSocket():
         print(ConfigReader.g_config.host)
         s.bind((ConfigReader.g_config.host, ConfigReader.g_config.port))
     except socket.error as msg:
-        print ('Bind failed. Error Code : ' + msg)
+        print ('Bind failed. Error Code : ' + str(msg))
+        time.sleep(60)
         return
 
     s.listen(10)
@@ -353,8 +359,8 @@ def CreateListeningSocketWrapper():
 ''' ------------------------------------------------------------------------------'''
 
 
-if not ConfigReader.g_config.bt_mac_addreses:
-    scan.ScanForTomatoOrDie()
+#if not ConfigReader.g_config.bt_mac_addreses:
+#    scan.ScanForTomatoOrDie() Add here code to check that xdrip ip is set.
 
 try:
     MongoWrapper.write_log_to_mongo(log_file, "starting program")
@@ -460,100 +466,27 @@ class DataCollector():
             
         self.lastReceiveTimestamp_ = time.time()
         
-        # Check if we have received a new sensor request, if yes answer it directly.
-        if len(self.data_) == 0 and len (new_data) == 1 and new_data[0] == 0x32:
-            print('Recieved request to allow new sensor - allowing it.')
-            str1 = bytes([0xd3,1])
-            CharacteristicSend.write(str1)
-            
-            # send command to start reading
-            str1 = bytes([0xf0])
-            CharacteristicSend.write(str1)
-            
-            self.reinit()
-            return
-            
-        # Check if we have received a no sensor message.
-        if len(self.data_) == 0 and len (new_data) == 1 and new_data[0] == 0x34:
-            logging.info('Recieved no sensor event.')
-            
-            real_data = bytearray(new_data[0:1])
-            #print('real_data = ', binascii.b2a_hex(real_data))
-            
-            #checksom_ok = self.VerifyChecksum(real_data)
-            #logging.info('checksum_ok = %s' % checksom_ok)
-        
-            captured_time = int(time.time() * 1000)
-            DebugInfo = '%s %s %s' % (socket.gethostname(), time.strftime('%d-%m-%Y %H:%M:%S', time.localtime(captured_time / 1000)), 'tomato no sensor')
-        
-            sqw = sqllite3_wrapper( )
-            sqw.InsertReading(real_data, captured_time, True, DebugInfo, NoSensor = True)
-            mongo_wrapper.SetEvent()
-            
-            
-            self.reinit()
-            return
 
         self.data_ = self.data_ + new_data
-        #print('total = ' ,binascii.b2a_hex(self.data_))
+        logging.info('recieved %d total = %s' ,len(new_data), binascii.b2a_hex(self.data_))
         self.AreWeDone(CharacteristicSend)
         
     def AreWeDone(self, CharacteristicSend):
         if self.recviedEnoughData_:
             return
-        if len(self.data_) < 344 + 18 + 1:
+        if len(self.data_) < 46:
             return
         self.recviedEnoughData_ = True
         print('we have enough data len = ', len(self.data_))
-        real_data = bytearray(self.data_[18:344+18])
-        #print('real_data = ', binascii.b2a_hex(real_data))
-        checksom_ok = self.VerifyChecksum(real_data)
-        logging.info('checksum_ok = %s' % checksom_ok)
-        
-        # Do validation checks:
-        # 1) Start byte = 0x28
-        # 2) End byte = 0x29
-        # 3) len = len
-        print('start byte = ', self.data_[0])
-        print('end byte = ', self.data_[len(self.data_ )-1])
-        print('len = ', self.data_[1] * 256 + self.data_[2])
-        print('battery = ', self.data_[13])
-        FwVersion = format(self.data_[14] * 256 + self.data_[15],'x')
-        print(type(FwVersion))
-        HwVersion = format(self.data_[16] * 256 + self.data_[17],'x')
-        print('fw version = ',  FwVersion)
-        print('hw version = ',  HwVersion)
-        SensorId = self.decodeSerialNumber(self.data_[5:13])
-        print('sensor serial number', SensorId)
-        
-        if self.data_[0] != 0x28:
-            print('bad start byte ', self.data_[0])
-            checksom_ok = False
-
-        if self.data_[len(self.data_ )-1] != 0x29:
-            print('bad end byte ', self.data_[len(self.data_ )-1])
-            checksom_ok = False
-            
-        if len(self.data_) != self.data_[1] * 256 + self.data_[2]:
-            print('bad length of buffer', self.data_[1] * 256 + self.data_[2] )
-            checksom_ok = False
+        checksom_ok = False
+        #logging.info('checksum_ok = %s' % checksom_ok)
         
         captured_time = int(time.time() * 1000)
-        DebugInfo = '%s %s %s' % (socket.gethostname(), time.strftime('%d-%m-%Y %H:%M:%S', time.localtime(captured_time / 1000)), 'tomato')
+        DebugInfo = '%s %s %s' % (socket.gethostname(), time.strftime('%d-%m-%Y %H:%M:%S', time.localtime(captured_time / 1000)), 'libre2')
         
         sqw = sqllite3_wrapper( )
-        sqw.InsertReading(real_data, captured_time, checksom_ok, DebugInfo, TomatoBatteryLife = int(self.data_[13]), 
-                          FwVersion = FwVersion, HwVersion = HwVersion, SensorId = SensorId)
+        sqw.InsertReading(self.data_, captured_time, checksom_ok, DebugInfo)
         mongo_wrapper.SetEvent()
-        
-        if not checksom_ok:
-            self.multipleRetries_.crcErrorHappened()
-            if self.multipleRetries_.tryAgainAlowed():
-            
-                time.sleep(5)
-                str1 = bytes([0xf0])
-                logging.info('Sending a request for more data after send failure')
-                CharacteristicSend.write(str1)
                 
 
 
@@ -649,37 +582,39 @@ class MyDelegate(btle.DefaultDelegate):
 
 
 def ReadBLEData():     
-    print ("Connecting...")
-    dev = btle.Peripheral(ConfigReader.g_config.bt_mac_addreses, 'random')
+    print ("Connecting to xDrip...")
+    connection_params = ReadDeviceAddresses(True)
+    print ("Connecting to btDevice...")
+    dev = btle.Peripheral(connection_params['MacAddress'].lower())# ?????, 'random')
 
     print ("Services...")
     for svc in dev.services:
         print (str(svc))
     
-    NRF_UART_SERVICE = btle.UUID("6E400001-B5A3-F393-E0A9-E50E24DCCA9E") # nrfDataService
+    NRF_UART_SERVICE = btle.UUID("0000fde3-0000-1000-8000-00805f9b34fb") # nrfDataService
  
     print ("charterstics...")
     nrfGattService = dev.getServiceByUUID(NRF_UART_SERVICE)
     for ch in nrfGattService.getCharacteristics():
          print (str(ch))
 
-    NRF_UART_RX = btle.UUID("6E400002-B5A3-F393-E0A9-E50E24DCCA9E")
-    NRF_UART_TX = btle.UUID("6E400003-B5A3-F393-E0A9-E50E24DCCA9E")
+    NRF_UART_RX = btle.UUID("0000f001-0000-1000-8000-00805f9b34fb")
+    NRF_UART_TX = btle.UUID("0000f002-0000-1000-8000-00805f9b34fb")
     CLIENT_CHARACTERISTIC_CONFIG =  btle.UUID("00002902-0000-1000-8000-00805f9b34fb")
     
     nrfGattCharacteristic = nrfGattService.getCharacteristics(NRF_UART_TX)
     print ("nrfGattCharacteristic = ", nrfGattCharacteristic)
     #print  nrfGattCharacteristic.supportsRead()
     print (nrfGattCharacteristic[0].propertiesToString())
-    #???nrfGattCharacteristic[0].write(struct.pack('<bb', 0x01, 0x00), False)
+
     bdescriptor =  nrfGattCharacteristic[0].getDescriptors(CLIENT_CHARACTERISTIC_CONFIG)
     bdescriptor[0].write(struct.pack('<bb', 0x01, 0x00), False)
     CharacteristicSend = nrfGattService.getCharacteristics(NRF_UART_RX)[0]
 
     dev.setDelegate( MyDelegate(CharacteristicSend) )
     
-    
-    str1 = bytes([240])
+    connection_params = ReadDeviceAddresses(False)
+    str1 = base64.decodebytes(connection_params['BtUnlockBuffer'].encode('ascii'))
     print(str1)
     CharacteristicSend.write(str1)
        
@@ -691,6 +626,26 @@ def ReadBLEData():
 logging.basicConfig(level=logging.DEBUG, format='%(levelname)s %(asctime)s %(message)s')
         
 #btle.Debugging = True
+
+
+def ReadDeviceAddresses(read_only):
+    # Add code to verify config exists, and make sure errors are printed correctly.
+    sha_1 = hashlib.sha1()
+    sha_1.update(ConfigReader.g_config.api_secret.encode('utf-8'))
+    print(sha_1.hexdigest())
+    headers = {'API-secret': sha_1.hexdigest()}
+    response = requests.get("http://%s:17580/Libre2ConnectCode.json?ReadOnly=%s" % 
+                               ( ConfigReader.g_config.xdrip_ip_addresses ,str(read_only).lower()),
+                            headers=headers )
+    
+                            
+    print (response.status_code, response.json(), type(response.json()))
+    if response.status_code != 200:
+        print('Error connecting to xDrip not continuing')
+        raise ValueError('Error connecting to xDrip not continuing')
+    
+    return response.json()
+
 
 while 1:
     try:

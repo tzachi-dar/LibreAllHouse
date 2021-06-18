@@ -11,6 +11,8 @@ class Config:
     host = None
     port = None
     bt_mac_addreses = None
+    xdrip_addresses = None
+    api_secret = None
 
     def GetFileName(self):
         path = os.path.dirname(os.path.abspath(inspect.stack()[0][1]))
@@ -60,6 +62,8 @@ class Config:
         g_config.port = int(config.get('TcpSockets', 'port'))
         
         g_config.bt_mac_addreses = config.get('BTDevice', 'bt_mac_address')
+        g_config.xdrip_ip_addresses = config.get('XDrip', 'ip_addresses')
+        g_config.api_secret = config.get('XDrip', 'api_secret')
     
     def __str__(self):
         return str(self.__class__) + ": " + str(self.__dict__)
