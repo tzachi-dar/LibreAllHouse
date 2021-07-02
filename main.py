@@ -636,7 +636,7 @@ def ReadDeviceAddresses(read_only):
     headers = {'API-secret': sha_1.hexdigest()}
     response = requests.get("http://%s:17580/Libre2ConnectCode.json?ReadOnly=%s" % 
                                ( ConfigReader.g_config.xdrip_ip_addresses ,str(read_only).lower()),
-                            headers=headers )
+                            headers=headers, timeout = 10 )
     
                             
     print (response.status_code, response.json(), type(response.json()))
