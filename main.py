@@ -337,7 +337,7 @@ def CreateListeningSocket():
         return
 
     s.listen(10)
-    print ("Waiting for connections")
+    print ("Waiting for TCP/IP connections from xDrip.")
 
     while 1:
         conn, addr = s.accept()
@@ -582,12 +582,15 @@ class MyDelegate(btle.DefaultDelegate):
 
 
 def ReadBLEData():     
+    ScanForAbbottUntilFound()
+    #time.sleep(1)
+    
     print ("Connecting to xDrip...")
     connection_params = ReadDeviceAddresses(True)
-    print ("Connecting to btDevice...")
+    logging.info("Connecting to btDevice...")
     dev = btle.Peripheral(connection_params['MacAddress'].lower())# ?????, 'random')
 
-    print ("Services...")
+    logging.info("Connected - Services are:")
     for svc in dev.services:
         print (str(svc))
     
@@ -627,6 +630,28 @@ logging.basicConfig(level=logging.DEBUG, format='%(levelname)s %(asctime)s %(mes
         
 #btle.Debugging = True
 
+def ScanForAbbottUntilFound():
+    if os.geteuid() !=0:
+        print ('you need root permission for ble scanning.')
+        print ('please run the program with sudo ...')
+        time.sleep(10)
+        return
+    while(True):
+        scanner = btle.Scanner()
+        #print('scanning for miaomiao devices')
+        try: 
+            devices = scanner.scan(1)
+        except btle.BTLEManagementError as err:
+            logging.error('scanner.scan() raised exception ' + str(err));
+            return  
+        
+        #print('devices found:')
+        for device in devices:
+            name = device.getValueText(9)
+            if name  and 'ABBOTT' in name: #???? Pass the full name here
+                logging.info( "Sensor found %s %s %s %s", str(device.addr),  device.addrType, name, device.rssi)        
+                return
+
 
 def ReadDeviceAddresses(read_only):
     # Add code to verify config exists, and make sure errors are printed correctly.
@@ -663,4 +688,4 @@ while 1:
             repr(traceback.format_exception(exc_type, exc_value, exc_traceback)))
 
         
-    time.sleep(60)
+    time.sleep(3)
