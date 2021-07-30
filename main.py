@@ -304,6 +304,7 @@ def clientThread(connlocal):
 
             if decoded['version'] == 2:
                 print("new version %s" % decoded['version'] )
+                ConfigReader.g_config.SetIpAddressesIfEmpty(decoded['xDripIpAddresses'])
                 reply = CreateVersion2Response(decoded, connlocal)
             
             print ("reply = %s" % reply)
@@ -579,16 +580,21 @@ class MyDelegate(btle.DefaultDelegate):
         if self.count % 10 == 0:
             print (self.count)
 
+# Using a global here since ReadData never returns.
+g_remote_mac = None
 
-
-def ReadBLEData():     
-    ScanForAbbottUntilFound()
+def ReadBLEData():
+    global g_remote_mac 
+    ScanForAbbottUntilFound(g_remote_mac)
     #time.sleep(1)
     
     print ("Connecting to xDrip...")
     connection_params = ReadDeviceAddresses(True)
+    if not connection_params:
+        return
+    g_remote_mac = connection_params['MacAddress'].lower()
     logging.info("Connecting to btDevice...")
-    dev = btle.Peripheral(connection_params['MacAddress'].lower())# ?????, 'random')
+    dev = btle.Peripheral(g_remote_mac)
 
     logging.info("Connected - Services are:")
     for svc in dev.services:
@@ -630,7 +636,9 @@ logging.basicConfig(level=logging.DEBUG, format='%(levelname)s %(asctime)s %(mes
         
 #btle.Debugging = True
 
-def ScanForAbbottUntilFound():
+def ScanForAbbottUntilFound(remote_mac):
+    if not remote_mac:
+        return
     if os.geteuid() !=0:
         print ('you need root permission for ble scanning.')
         print ('please run the program with sudo ...')
@@ -648,16 +656,19 @@ def ScanForAbbottUntilFound():
         #print('devices found:')
         for device in devices:
             name = device.getValueText(9)
-            if name  and 'ABBOTT' in name: #???? Pass the full name here
-                logging.info( "Sensor found %s %s %s %s", str(device.addr),  device.addrType, name, device.rssi)        
+            if name  and 'ABBOTT' in name and remote_mac == str(device.addr): #???? Pass the full name here
+                logging.info( "Sensor found %s %s %s %s", str(device.addr),  device.addrType, name, device.rssi)    
                 return
 
 
 def ReadDeviceAddresses(read_only):
+    if not ConfigReader.g_config.xdrip_ip_addresses:
+        print('no ConfigReader.g_config.xdrip_ip_addresses yet, will be solved when xDrip connects.')
+        time.sleep(10)
+        return 
     # Add code to verify config exists, and make sure errors are printed correctly.
     sha_1 = hashlib.sha1()
     sha_1.update(ConfigReader.g_config.api_secret.encode('utf-8'))
-    print(sha_1.hexdigest())
     headers = {'API-secret': sha_1.hexdigest()}
     response = requests.get("http://%s:17580/Libre2ConnectCode.json?ReadOnly=%s" % 
                                ( ConfigReader.g_config.xdrip_ip_addresses ,str(read_only).lower()),

@@ -11,8 +11,10 @@ class Config:
     host = None
     port = None
     bt_mac_addreses = None
-    xdrip_addresses = None
+    xdrip_ip_addresses = None
+    xdrip_ip_addresses_in_file = False
     api_secret = None
+    
 
     def GetFileName(self):
         path = os.path.dirname(os.path.abspath(inspect.stack()[0][1]))
@@ -61,12 +63,18 @@ class Config:
         g_config.host = config.get('TcpSockets', 'host')
         g_config.port = int(config.get('TcpSockets', 'port'))
         
-        g_config.bt_mac_addreses = config.get('BTDevice', 'bt_mac_address')
-        g_config.xdrip_ip_addresses = config.get('XDrip', 'ip_addresses')
+        g_config.xdrip_ip_addresses = config.get('XDrip', 'ip_addresses', fallback=None)
+        if g_config.xdrip_ip_addresses:
+            xdrip_ip_addresses_in_file = True
         g_config.api_secret = config.get('XDrip', 'api_secret')
     
     def __str__(self):
         return str(self.__class__) + ": " + str(self.__dict__)
+        
+    def SetIpAddressesIfEmpty(self, ip_addresses):
+        if g_config.xdrip_ip_addresses_in_file:
+            return
+        g_config.xdrip_ip_addresses = ip_addresses
 
 g_config = Config()
 g_config.ReadConfig() 
