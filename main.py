@@ -215,6 +215,8 @@ class MongoWrapper(threading.Thread):
    
     @staticmethod
     def write_object_to_mongo(log_file, mongo_dict):
+        if not ConfigReader.g_config.db_uri:
+            return 
         client = MongoClient(ConfigReader.g_config.db_uri + '?retryWrites=true&w=majority')
         db = client[ConfigReader.g_config.db_name]
         collection = db[ConfigReader.g_config.collection_name]
