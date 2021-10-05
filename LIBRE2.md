@@ -79,7 +79,7 @@ Ctrl+C to cancel monitoring log
     
 2.  On the list of receivers, enter the raspberry pis as a comma-separated list. The raspberry pi software runs on port 50005 so you need to include this in the address For example:
 
-`192.168.1.2:50005,192.168.1.6`
+`192.168.1.2:50005,192.168.1.6:50005`
 
 ## Step 6 - Configure Pi to connect to xdrip
 1. On the pi, inside the LibreAllHouse directory, open the config.cfg file
