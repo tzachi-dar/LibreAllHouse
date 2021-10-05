@@ -8,8 +8,6 @@
   - [Step 4 - Run the program:](#step-4---run-the-program)
   - [Step 5 - Configure xDrip to connect to PI](#step-5---configure-xdrip-to-connect-to-pi)
   - [Step 6 - Configure Pi to connect to xdrip](#step-6---configure-pi-to-connect-to-xdrip)
-  - [Step 7 - Configure the pi to also upload data to a mongodb (optional).](#step-7---configure-the-pi-to-also-upload-data-to-a-mongodb-optional)
-  - [Step 8 - Configure a phone as receiver (optional)](#step-8---configure-a-phone-as-receiver-optional)
   - [Appendix A - Important screen commands (just information nothing to do):](#appendix-a---important-screen-commands-just-information-nothing-to-do)
   - [Appendix B - Configuring the pis to be detected by xDrip.](#appendix-b---configuring-the-pis-to-be-detected-by-xdrip)
   - [Appendix C - Copying private key to raspberry pis. (optional)](#appendix-c---copying-private-key-to-raspberry-pis-optional)
@@ -48,18 +46,16 @@ Open terminal on rpi
     sudo pip3 install dnspython
     sudo apt-get install -y vim
 
-## Step 4 - Run the program:
-
 If you do not have git installed, you will need to install that too:
 
     sudo apt-get install -y git
+## Step 4 - Run the program:
 
 To run the program manually do: 
 
 1. git clone https://github.com/tzachi-dar/LibreAllHouse.git
 2. cd LibreAllHouse/
-3. Edit the config.cfg file to unter mongodb parameters (optional). (for example db_uri = mongodb+srv://userj:passi@cluster-b6k1n0tj.bg18m.mongodb.net/heroku_b6k1n0tj)
-4. sudo python3 main.py 
+3. sudo python3 main.py 
 
 In order to run the program automatically after boot edit the file `/etc/rc.local`:
     
@@ -81,11 +77,9 @@ Ctrl+C to cancel monitoring log
 
 1.  On Hardware Data Source select ‘Libre wifi’ or ‘Libre Bluetooth + wifi’
     
-2.  On the list of receivers, enter the list of raspberry pis and/or the mongodb addresses. The raspberry pi software runs on port 50005 so you need to include this in the address For example:
+2.  On the list of receivers, enter the raspberry pis as a comma-separated list. The raspberry pi software runs on port 50005 so you need to include this in the address For example:
 
-`192.168.1.2:50005,mongodb://user:[pass@ds11551.mlab.com](mailto:pass@ds11551.mlab.com):11551/nightscout3/libre`
-
-Replace nightscout3 with your connection.
+`192.168.1.2:50005,192.168.1.6`
 
 ## Step 6 - Configure Pi to connect to xdrip
 1. On the pi, inside the LibreAllHouse directory, open the config.cfg file
@@ -98,35 +92,6 @@ Replace nightscout3 with your connection.
 5. Enable **xDrip Web Service**
 6. Check the box for **Open Web Service**
 7. Enter an **xDrip Web Service Secret**. This should match the secret configured in the **config.cfg** file on your Pi
-
-## Step 7 - Configure the pi to also upload data to a mongodb (optional).
-
-This is an optional step, and is only needed if your pis are not connected to the same network as xdrip.
-
-Most people will not need to use it.
-
-On the config.cfg file you need to set the parameters of the mongodb. For example:
-
-If you are connecting to atlasdb it should look like:
-
-[MongoData]
-
-db_uri = mongodb+srv://USER:PASSWORD@URLPREFIX.mongodb.net
-
-db_name = DBNAME
-
-collection_name = COLLECTION
-
-## Step 8 - Configure a phone as receiver (optional)
-
-### It is also possible to use a phone with xdrip to upload the data to the mongo db:
-
-1. on the watch, go to settings->cloud upload->mongo db
-	a) enable nightscout mongodb sync.
-	b) enter the mongodb uri
-	c) enable **upload libre transmitter data**
-
-You can now see that data received by this watch is uploaded to the mongo db to a collection called libre.
 
 ## Appendix A - Important screen commands (just information nothing to do):
 
