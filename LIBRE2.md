@@ -5,14 +5,14 @@
   - [Step 1 - (Good practices, optional):](#step-1---good-practices-optional)
   - [Step 2 - Connect the pi to wifi.](#step-2---connect-the-pi-to-wifi)
   - [Step 3 - Install the required packages](#step-3---install-the-required-packages)
-  - [Step 4 Run the program:](#step-4-run-the-program)
-  - [Step 5 Configure xDrip to connect to PI](#step-5-configure-xdrip-to-connect-to-pi)
+  - [Step 4 - Run the program:](#step-4-run-the-program)
+  - [Step 5 - Configure xDrip to connect to PI](#step-5-configure-xdrip-to-connect-to-pi)
   - [Step 6 - Configure Pi to connect to xdrip](#step-6---configure-pi-to-connect-to-xdrip)
   - [Step 7 - Configure the pi to also upload data to a mongodb (optional).](#step-7---configure-the-pi-to-also-upload-data-to-a-mongodb-optional)
   - [Step 7 - Configure a phone as receiver (optional)](#step-7---configure-a-phone-as-receiver-optional)
-  - [Appendix A - important screen commands (just information nothing to do):](#appendix-a---important-screen-commands-just-information-nothing-to-do)
-  - [Appendix B - configuring the pis to be detected by xDrip.](#appendix-b---configuring-the-pis-to-be-detected-by-xdrip)
-  - [Appendix C - copying private key to raspberry pis. (optional)](#appendix-c---copying-private-key-to-raspberry-pis-optional)
+  - [Appendix A - Important screen commands (just information nothing to do):](#appendix-a---important-screen-commands-just-information-nothing-to-do)
+  - [Appendix B - Configuring the pis to be detected by xDrip.](#appendix-b---configuring-the-pis-to-be-detected-by-xdrip)
+  - [Appendix C - Copying private key to raspberry pis. (optional)](#appendix-c---copying-private-key-to-raspberry-pis-optional)
   - [Appendix D - Configuring raspberry-pi from command line.](#appendix-d---configuring-raspberry-pi-from-command-line)
 
 ## Step 0 - Install the Pi with the latest Raspberry Pi OS
@@ -48,7 +48,7 @@ Open terminal on rpi
     sudo pip3 install dnspython
     sudo apt-get install -y vim
 
-## Step 4 Run the program:
+## Step 4 - Run the program:
 
 If you do not have git installed, you will need to install that too:
 
@@ -77,7 +77,7 @@ To look at the file use:
 
 Ctrl+C to cancel monitoring log 
  
-## Step 5 Configure xDrip to connect to PI
+## Step 5 - Configure xDrip to connect to PI
 
 1.  On Hardware Data Source select ‘Libre wifi’ or ‘Libre Bluetooth + wifi’
     
@@ -117,7 +117,7 @@ db_name = DBNAME
 
 collection_name = COLLECTION
 
-## Step 7 - Configure a phone as receiver (optional)
+## Step 8 - Configure a phone as receiver (optional)
 
 ### It is also possible to use a phone with xdrip to upload the data to the mongo db:
 
@@ -128,7 +128,7 @@ collection_name = COLLECTION
 
 You can now see that data received by this watch is uploaded to the mongo db to a collection called libre.
 
-## Appendix A - important screen commands (just information nothing to do):
+## Appendix A - Important screen commands (just information nothing to do):
 
 Since program runs in screen, here are some screen commands for debugging.
 
@@ -146,14 +146,14 @@ Kill a screen session: **Ctrl+D**
 
 Tail
 
-## Appendix B - configuring the pis to be detected by xDrip.
+## Appendix B - Configuring the pis to be detected by xDrip.
 
 Should work by default on recent raspberry pis.
 
 If you want to be able to ping a pi using a windows machine you will have to setup an mdns client. For example from here: [https://support.apple.com/kb/DL999?locale=en_US](https://support.apple.com/kb/DL999?locale=en_US)
   
 
-## Appendix C - copying private key to raspberry pis. (optional)
+## Appendix C - Copying private key to raspberry pis. (optional)
 
 Full explanation can be found at: [https://dvpizone.wordpress.com/2014/03/02/how-to-connect-to-your-raspberry-pi-using-ssh-key-pairs/](https://dvpizone.wordpress.com/2014/03/02/how-to-connect-to-your-raspberry-pi-using-ssh-key-pairs/) 
 
