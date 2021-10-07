@@ -1,4 +1,4 @@
-# Configuring Raspberry Pi for Libre 2
+﻿# Configuring Raspberry Pi for Libre 2
 
 ## Table of Contents
   - [Step 0 - Install the Pi with the latest Raspberry Pi OS](#step-0---install-the-pi-with-the-latest-raspberry-pi-os)
@@ -8,6 +8,7 @@
   - [Step 4 - Run the program:](#step-4---run-the-program)
   - [Step 5 - Configure xDrip to connect to PI](#step-5---configure-xdrip-to-connect-to-pi)
   - [Step 6 - Configure Pi to connect to xdrip](#step-6---configure-pi-to-connect-to-xdrip)
+  - [Step 7 - Install the latest version of bluepy from sources](#step-7---install-the-latest-version-of-bluepy-from-sources)
   - [Appendix A - Important screen commands (just information nothing to do):](#appendix-a---important-screen-commands-just-information-nothing-to-do)
   - [Appendix B - Configuring the pis to be detected by xDrip.](#appendix-b---configuring-the-pis-to-be-detected-by-xdrip)
   - [Appendix C - Copying private key to raspberry pis. (optional)](#appendix-c---copying-private-key-to-raspberry-pis-optional)
@@ -39,23 +40,23 @@ Once connected to wifi, remember the IP address that you are assigned as this wi
 ## Step 3 - Install the required packages
 Open terminal on rpi
 
-    sudo apt-get install -y screen
-    sudo apt-get install -y python3-pip libglib2.0-dev
+    sudo apt-get install -y screen python3-pip libglib2.0-dev vim git
     sudo pip3 install bluepy
     sudo pip3 install pymongo
     sudo pip3 install dnspython
-    sudo apt-get install -y vim
 
-If you do not have git installed, you will need to install that too:
-
-    sudo apt-get install -y git
 ## Step 4 - Run the program:
 
-To run the program manually do: 
+To install the program do: 
 
-1. git clone https://github.com/tzachi-dar/LibreAllHouse.git
-2. cd LibreAllHouse/
-3. sudo python3 main.py 
+```
+git clone https://github.com/tzachi-dar/LibreAllHouse.git
+cd LibreAllHouse/
+git checkout libre2
+```
+
+To manually run the program  
+    sudo python3 main.py
 
 In order to run the program automatically after boot edit the file `/etc/rc.local`:
     
@@ -69,7 +70,7 @@ Reboot the pi and look at the file /home/pi/LibreAllHouse/screen.log to see if t
 
 To look at the file use:
 
-    tail -F ~/LibreAllHouse/screen.log  
+    tail -F ~/LibreAllHouse/screen.log
 
 Ctrl+C to cancel monitoring log 
  
@@ -92,6 +93,22 @@ Ctrl+C to cancel monitoring log
 5. Enable **xDrip Web Service**
 6. Check the box for **Open Web Service**
 7. Enter an **xDrip Web Service Secret**. This should match the secret configured in the **config.cfg** file on your Pi
+
+## Step 7 - Install the latest version of bluepy from sources
+On some new installations, we had to install the latest bluepi version from code.
+This can be done using the following commands
+
+```
+sudo apt-get -y install git build-essential libglib2.0-dev   
+git clone https://github.com/IanHarvey/bluepy.git
+cd bluepy
+python3 setup.py build
+sudo python3 setup.py install
+sudo cp bluepy/*.py /usr/local/lib/python3.7/dist-packages/bluepy/
+sudo cp ./build/lib.linux-armv7l-2.7/bluepy/bluepy-helper /usr/local/lib/python3.7/dist-packages/bluepy/bluepy-helper
+sudo cp ./bluepy/bluepy-helper /usr/local/lib/python3.7/dist-packages/bluepy/bluepy-helper
+```
+
 
 ## Appendix A - Important screen commands (just information nothing to do):
 
