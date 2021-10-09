@@ -9,10 +9,11 @@
   - [Step 5 - Configure xDrip to connect to PI](#step-5---configure-xdrip-to-connect-to-pi)
   - [Step 6 - Configure Pi to connect to xdrip](#step-6---configure-pi-to-connect-to-xdrip)
   - [Step 7 - Install the latest version of bluepy from sources](#step-7---install-the-latest-version-of-bluepy-from-sources)
-  - [Appendix A - Important screen commands (just information nothing to do):](#appendix-a---important-screen-commands-just-information-nothing-to-do)
-  - [Appendix B - Configuring the pis to be detected by xDrip.](#appendix-b---configuring-the-pis-to-be-detected-by-xdrip)
-  - [Appendix C - Copying private key to raspberry pis. (optional)](#appendix-c---copying-private-key-to-raspberry-pis-optional)
-  - [Appendix D - Configuring raspberry-pi from command line.](#appendix-d---configuring-raspberry-pi-from-command-line)
+  - [Appendix A- Increasing the connection range:](#appendix-a--increasing-the-connection-range)
+  - [Appendix B - Important screen commands (just information nothing to do):](#appendix-b---important-screen-commands-just-information-nothing-to-do)
+  - [Appendix C - Configuring the pis to be detected by xDrip.](#appendix-c---configuring-the-pis-to-be-detected-by-xdrip)
+  - [Appendix D - Copying private key to raspberry pis. (optional)](#appendix-d---copying-private-key-to-raspberry-pis-optional)
+  - [Appendix E - Configuring raspberry-pi from command line.](#appendix-e---configuring-raspberry-pi-from-command-line)
 
 ## Step 0 - Install the Pi with the latest Raspberry Pi OS
 https://www.raspberrypi.org/software/operating-systems/
@@ -109,8 +110,15 @@ sudo cp ./build/lib.linux-armv7l-2.7/bluepy/bluepy-helper /usr/local/lib/python3
 sudo cp ./bluepy/bluepy-helper /usr/local/lib/python3.7/dist-packages/bluepy/bluepy-helper
 ```
 
+## Appendix A- Increasing the connection range:
+![Alt text](Bluetooth1.png?raw=true "Title")
+My experience show that libre2 Bluetooth power is smaller than the miaomiao. In order to increase the 
+range, I have used [Feasycom FSC-BP119](https://www.feasycom.com/product-100m-usb-bluetooth-dongle.html).  This Bluetooth dongle comes burned with the correct FW and has
+linux drivers for it in the rpi fw. I bought it in [AliExpress FEASYCOM Official Store](https://www.aliexpress.com/item/4000087707727.html?spm=a2g0o.12057483.product-detail-btn.1.72ce761daF4W35).
+More info about it can be found in [these](Bluetooth2.png) pictures.
 
-## Appendix A - Important screen commands (just information nothing to do):
+
+## Appendix B - Important screen commands (just information nothing to do):
 
 Since program runs in screen, here are some screen commands for debugging.
 
@@ -128,14 +136,14 @@ Kill a screen session: **Ctrl+D**
 
 Tail
 
-## Appendix B - Configuring the pis to be detected by xDrip.
+## Appendix C - Configuring the pis to be detected by xDrip.
 
 Should work by default on recent raspberry pis.
 
 If you want to be able to ping a pi using a windows machine you will have to setup an mdns client. For example from here: [https://support.apple.com/kb/DL999?locale=en_US](https://support.apple.com/kb/DL999?locale=en_US)
   
 
-## Appendix C - Copying private key to raspberry pis. (optional)
+## Appendix D - Copying private key to raspberry pis. (optional)
 
 Full explanation can be found at: [https://dvpizone.wordpress.com/2014/03/02/how-to-connect-to-your-raspberry-pi-using-ssh-key-pairs/](https://dvpizone.wordpress.com/2014/03/02/how-to-connect-to-your-raspberry-pi-using-ssh-key-pairs/) 
 
@@ -167,7 +175,7 @@ The public key after saves looks like:
 
  In other words remove 3 lines, and add **ssh-rsa** in the beginning.
 
-## Appendix D - Configuring raspberry-pi from command line.
+## Appendix E - Configuring raspberry-pi from command line.
 
 Host name: [https://www.howtogeek.com/167195/how-to-change-your-raspberry-pi-or-other-linux-devices-hostname/](https://www.howtogeek.com/167195/how-to-change-your-raspberry-pi-or-other-linux-devices-hostname/)
 
