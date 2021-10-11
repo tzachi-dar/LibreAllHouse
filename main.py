@@ -19,6 +19,7 @@ import traceback
 import logging
 import random
 import scan
+from datetime import timedelta
 
 import ConfigReader
 import requests
@@ -646,7 +647,11 @@ def ScanForAbbottUntilFound(remote_mac):
         print ('please run the program with sudo ...')
         time.sleep(10)
         return
+    start = datetime.datetime.now()    
     while(True):
+        if timedelta(minutes=10) + start < datetime.datetime.now():
+            logging.info("Leaving ScanForAbbottUntilFound because of timeout")
+            return
         scanner = btle.Scanner()
         #print('scanning for miaomiao devices')
         try: 
