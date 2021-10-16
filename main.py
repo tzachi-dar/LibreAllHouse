@@ -238,7 +238,7 @@ log_file = open('log_hist.txt' , 'a', 1)
 
 ''' ----------------- threads that respond to tcp requests -----------------------'''
 
-def CreateVersion1Response(numberOfRecords, connlocal):
+def CreateVersion1Response(numberOfRecords):
     ''' This code is here mainly to support a connection from old xDrip clients on g4'''
     reply = ''
     sqw = sqllite3_wrapper()
@@ -251,7 +251,7 @@ def CreateVersion1Response(numberOfRecords, connlocal):
 
     return reply
 
-def CreateVersion2Response(decoded, connlocal):
+def CreateVersion2Response(decoded):
     ''' This code is to sens answers for the main libre protocol
     The answer should be a json object that contains general fields, and an array
     of json objects which are the real readings.
@@ -290,7 +290,7 @@ def CreateVersion2Response(decoded, connlocal):
     
    
 
-def clientThread(connlocal):
+def clientThread(connlocal, ip_addr):
     try:
         connlocal.settimeout(10)
         while True:
@@ -303,12 +303,12 @@ def clientThread(connlocal):
             print (json.dumps(decoded, sort_keys=True, indent=4))
             if decoded['version'] == 1:
                 print("old version %s" % decoded['version'] )
-                reply = CreateVersion1Response(decoded['numberOfRecords'], connlocal)
+                reply = CreateVersion1Response(decoded['numberOfRecords'])
 
             if decoded['version'] == 2:
                 print("new version %s" % decoded['version'] )
-                ConfigReader.g_config.SetIpAddressesIfEmpty(decoded['xDripIpAddresses'])
-                reply = CreateVersion2Response(decoded, connlocal)
+                ConfigReader.g_config.SetIpAddressesIfEmpty(ip_addr)
+                reply = CreateVersion2Response(decoded)
             
             print ("reply = %s" % reply)
             # We should probably call connlocal.shutdown(socket.SHUT_WR), but for historical reasons, 
@@ -347,7 +347,7 @@ def CreateListeningSocket():
         conn, addr = s.accept()
         print ('Connected with ' + addr[0] + ':' + str(addr[1]))
 
-        threading.Thread(target=clientThread, args=(conn,)).start()
+        threading.Thread(target=clientThread, args=(conn, addr[0])).start()
 
 def CreateListeningSocketWrapper():
     while 1:
@@ -625,11 +625,12 @@ def ReadBLEData():
 
     dev.setDelegate( MyDelegate(CharacteristicSend) )
     
-    connection_params = ReadDeviceAddresses(False)
+    connection_params = ReadDeviceAddresses(True)
     str1 = base64.decodebytes(connection_params['BtUnlockBuffer'].encode('ascii'))
     print(str1)
     CharacteristicSend.write(str1)
-       
+    # update xDrip only after write completes
+    ReadDeviceAddresses(False)
     time.sleep(1.0) # Allow sensor to stabilize
     
     while True:
