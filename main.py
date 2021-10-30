@@ -307,6 +307,7 @@ def clientThread(connlocal, ip_addr):
 
             if decoded['version'] == 2:
                 print("new version %s" % decoded['version'] )
+                ConfigReader.g_config.SetMacAddresses(decoded.get('btAddresses'))
                 ConfigReader.g_config.SetIpAddressesIfEmpty(ip_addr)
                 reply = CreateVersion2Response(decoded)
             
@@ -583,21 +584,23 @@ class MyDelegate(btle.DefaultDelegate):
         if self.count % 10 == 0:
             print (self.count)
 
-# Using a global here since ReadData never returns.
-g_remote_mac = None
 
 def ReadBLEData():
-    global g_remote_mac 
-    ScanForAbbottUntilFound(g_remote_mac)
+    remote_mac = ScanForAbbottUntilFound()
     #time.sleep(1)
     
     print ("Connecting to xDrip...")
     connection_params = ReadDeviceAddresses(True)
     if not connection_params:
         return
-    g_remote_mac = connection_params['MacAddress'].lower()
-    logging.info("Connecting to btDevice...")
-    dev = btle.Peripheral(g_remote_mac)
+    # only check this after connection parameters exist.
+    if not remote_mac:
+        logging.error('No remote mac - xdrip version too old?')
+        time.sleep(20)
+        return
+    
+    logging.info("Connecting to btDevice... %s", remote_mac)
+    dev = btle.Peripheral(remote_mac)
 
     logging.info("Connected - Services are:")
     for svc in dev.services:
@@ -626,6 +629,13 @@ def ReadBLEData():
     dev.setDelegate( MyDelegate(CharacteristicSend) )
     
     connection_params = ReadDeviceAddresses(True)
+    if not connection_params:
+        return
+    latest_remote_mac = connection_params['MacAddress'].lower()
+    if latest_remote_mac != remote_mac:
+        logging.error('Mac has changed latest mac %s remote_mac %s', latest_remote_mac, remote_mac)
+        raise Exception('Mac has changed - new sensor?')
+        
     str1 = base64.decodebytes(connection_params['BtUnlockBuffer'].encode('ascii'))
     print(str1)
     CharacteristicSend.write(str1)
@@ -640,33 +650,34 @@ logging.basicConfig(level=logging.DEBUG, format='%(levelname)s %(asctime)s %(mes
         
 #btle.Debugging = True
 
-def ScanForAbbottUntilFound(remote_mac):
+# return remote_mac
+def ScanForAbbottUntilFound():
+    remote_mac = ConfigReader.g_config.bt_mac_addreses
     if not remote_mac:
         return
+    remote_mac = remote_mac.lower()
     if os.geteuid() !=0:
         print ('you need root permission for ble scanning.')
         print ('please run the program with sudo ...')
         time.sleep(10)
-        return
-    start = datetime.datetime.now()    
+        return remote_mac
     while(True):
-        if timedelta(minutes=10) + start < datetime.datetime.now():
-            logging.info("Leaving ScanForAbbottUntilFound because of timeout")
-            return
         scanner = btle.Scanner()
         #print('scanning for miaomiao devices')
         try: 
             devices = scanner.scan(1)
         except btle.BTLEManagementError as err:
             logging.error('scanner.scan() raised exception ' + str(err));
-            return  
+            return  remote_mac
         
+        remote_mac = ConfigReader.g_config.bt_mac_addreses.lower()
         #print('devices found:')
         for device in devices:
             name = device.getValueText(9)
-            if name  and 'ABBOTT' in name and remote_mac == str(device.addr): #???? Pass the full name here
+            #print(name, device.addr, remote_mac)
+            if name  and 'ABBOTT' in name and remote_mac == str(device.addr): 
                 logging.info( "Sensor found %s %s %s %s", str(device.addr),  device.addrType, name, device.rssi)    
-                return
+                return remote_mac
 
 
 def ReadDeviceAddresses(read_only):

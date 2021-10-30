@@ -75,6 +75,9 @@ class Config:
         if g_config.xdrip_ip_addresses_in_file:
             return
         g_config.xdrip_ip_addresses = ip_addresses
+        
+    def SetMacAddresses(self, mac):        
+        g_config.bt_mac_addreses = mac
 
 g_config = Config()
 g_config.ReadConfig() 
