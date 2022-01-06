@@ -14,6 +14,7 @@ class Config:
     xdrip_ip_addresses = None
     xdrip_ip_addresses_in_file = False
     api_secret = None
+    use_bt_scanning = True
     
 
     def GetFileName(self):
@@ -67,6 +68,8 @@ class Config:
         if g_config.xdrip_ip_addresses:
             xdrip_ip_addresses_in_file = True
         g_config.api_secret = config.get('XDrip', 'api_secret')
+        g_config.use_bt_scanning = config.getboolean('BTDevice', 'use_bt_scanning')
+        print('use_bt_scanning = ', g_config.use_bt_scanning)
     
     def __str__(self):
         return str(self.__class__) + ": " + str(self.__dict__)

@@ -300,18 +300,18 @@ def clientThread(connlocal, ip_addr):
                 break
             decoded = json.loads(data.decode('ascii'))
             print("type decoded = %s" % type (decoded))
-            print (json.dumps(decoded, sort_keys=True, indent=4))
+            logging.info( json.dumps(decoded, sort_keys=True, indent=4))
             if decoded['version'] == 1:
-                print("old version %s" % decoded['version'] )
+                logging.info("old version %s" % decoded['version'] )
                 reply = CreateVersion1Response(decoded['numberOfRecords'])
 
             if decoded['version'] == 2:
-                print("new version %s" % decoded['version'] )
+                logging.info("new version %s" % decoded['version'] )
                 ConfigReader.g_config.SetMacAddresses(decoded.get('btAddresses'))
                 ConfigReader.g_config.SetIpAddressesIfEmpty(ip_addr)
                 reply = CreateVersion2Response(decoded)
             
-            print ("reply = %s" % reply)
+            logging.info("reply = %s" % reply)
             # We should probably call connlocal.shutdown(socket.SHUT_WR), but for historical reasons, 
             # we send an empty string, and the other side will close the connection.
             reply = reply + "\n"
@@ -346,7 +346,7 @@ def CreateListeningSocket():
 
     while 1:
         conn, addr = s.accept()
-        print ('Connected with ' + addr[0] + ':' + str(addr[1]))
+        logging.info('Connected with ' + addr[0] + ':' + str(addr[1]))
 
         threading.Thread(target=clientThread, args=(conn, addr[0])).start()
 
@@ -586,8 +586,10 @@ class MyDelegate(btle.DefaultDelegate):
 
 
 def ReadBLEData():
-    remote_mac = ScanForAbbottUntilFound()
-    #time.sleep(1)
+    if ConfigReader.g_config.use_bt_scanning:
+        remote_mac = ScanForAbbottUntilFound()
+    else:
+        remote_mac = GetRemoteMacFromConfig()
     
     print ("Connecting to xDrip...")
     connection_params = ReadDeviceAddresses(True)
@@ -650,6 +652,12 @@ logging.basicConfig(level=logging.DEBUG, format='%(levelname)s %(asctime)s %(mes
         
 #btle.Debugging = True
 
+def GetRemoteMacFromConfig():
+    remote_mac = ConfigReader.g_config.bt_mac_addreses
+    if not remote_mac:
+        return
+    return remote_mac.lower()
+
 # return remote_mac
 def ScanForAbbottUntilFound():
     remote_mac = ConfigReader.g_config.bt_mac_addreses
@@ -659,7 +667,6 @@ def ScanForAbbottUntilFound():
     if os.geteuid() !=0:
         print ('you need root permission for ble scanning.')
         print ('please run the program with sudo ...')
-        time.sleep(10)
         return remote_mac
     while(True):
         scanner = btle.Scanner()
@@ -682,7 +689,7 @@ def ScanForAbbottUntilFound():
 
 def ReadDeviceAddresses(read_only):
     if not ConfigReader.g_config.xdrip_ip_addresses:
-        print('no ConfigReader.g_config.xdrip_ip_addresses yet, will be solved when xDrip connects.')
+        logging.warning('no ConfigReader.g_config.xdrip_ip_addresses yet, will be solved when xDrip connects.')
         time.sleep(10)
         return 
     # Add code to verify config exists, and make sure errors are printed correctly.
