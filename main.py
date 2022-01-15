@@ -19,7 +19,6 @@ import traceback
 import logging
 import random
 import scan
-from datetime import timedelta
 
 import ConfigReader
 import requests
@@ -645,8 +644,9 @@ def ReadBLEData():
     ReadDeviceAddresses(False)
     time.sleep(1.0) # Allow sensor to stabilize
     
-    while True:
+    while ConfigReader.g_config.ShouldDisconnectConnection(latest_remote_mac) == False:
         dev.waitForNotifications(1.0)
+    logging.error('disconnecting because of a new sensor, or timeout that is too big')
 
 logging.basicConfig(level=logging.DEBUG, format='%(levelname)s %(asctime)s %(message)s')
         
