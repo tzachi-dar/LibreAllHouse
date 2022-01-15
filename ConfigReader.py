@@ -2,6 +2,7 @@
 import configparser
 import os
 import inspect
+import time
 
 # Hold configuration data explicitly.
 class Config:
@@ -10,11 +11,15 @@ class Config:
     collection_name = None
     host = None
     port = None
-    bt_mac_addreses = None
     xdrip_ip_addresses = None
     xdrip_ip_addresses_in_file = False
     api_secret = None
     use_bt_scanning = True
+    
+    # The following are not realy part of the config, but are here due to the 
+    # fact that config is global.
+    bt_mac_addreses = None
+    bt_mac_addreses_last_set = time.time()  
     
 
     def GetFileName(self):
@@ -75,12 +80,27 @@ class Config:
         return str(self.__class__) + ": " + str(self.__dict__)
         
     def SetIpAddressesIfEmpty(self, ip_addresses):
-        if g_config.xdrip_ip_addresses_in_file:
+        if self.xdrip_ip_addresses_in_file:
             return
-        g_config.xdrip_ip_addresses = ip_addresses
+        self.xdrip_ip_addresses = ip_addresses
         
-    def SetMacAddresses(self, mac):        
-        g_config.bt_mac_addreses = mac
+    def SetMacAddresses(self, mac):
+        if mac:
+            self.bt_mac_addreses = mac.lower()
+            self.bt_mac_addreses_last_set = time.time()
+    
+    # Returns true if we have a new mac (= a new sensor)
+    # or that we did not talk with xDrip for 3 minutes (this is needed to allow someone else to try and talk).    
+    def ShouldDisconnectConnection(self, mac):
+        if mac != self.bt_mac_addreses:
+            print('Mac has changed - disconnecting old mac', self.bt_mac_addreses, 'new mac', mac)
+            return True
+        elapsed = time.time() - self.bt_mac_addreses_last_set
+        if elapsed > 300:
+            print('Too much time without xDrip asking to connect - disconnecting', elapsed )
+            return True
+        return False
+        
 
 g_config = Config()
 g_config.ReadConfig() 
