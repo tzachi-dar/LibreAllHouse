@@ -653,17 +653,13 @@ logging.basicConfig(level=logging.DEBUG, format='%(levelname)s %(asctime)s %(mes
 #btle.Debugging = True
 
 def GetRemoteMacFromConfig():
-    remote_mac = ConfigReader.g_config.bt_mac_addreses
-    if not remote_mac:
-        return
-    return remote_mac.lower()
+    return ConfigReader.g_config.bt_mac_addreses
 
 # return remote_mac
 def ScanForAbbottUntilFound():
     remote_mac = ConfigReader.g_config.bt_mac_addreses
     if not remote_mac:
         return
-    remote_mac = remote_mac.lower()
     if os.geteuid() !=0:
         print ('you need root permission for ble scanning.')
         print ('please run the program with sudo ...')
@@ -677,7 +673,7 @@ def ScanForAbbottUntilFound():
             logging.error('scanner.scan() raised exception ' + str(err));
             return  remote_mac
         
-        remote_mac = ConfigReader.g_config.bt_mac_addreses.lower()
+        remote_mac = ConfigReader.g_config.bt_mac_addreses
         #print('devices found:')
         for device in devices:
             name = device.getValueText(9)
