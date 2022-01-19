@@ -632,6 +632,7 @@ def ReadBLEData():
         connection_params = ReadDeviceAddresses(True)
         if not connection_params:
             return
+        ConfigReader.g_config.XDripConnected()
         latest_remote_mac = connection_params['MacAddress'].lower()
         if latest_remote_mac != remote_mac:
             logging.error('Mac has changed latest mac %s remote_mac %s', latest_remote_mac, remote_mac)

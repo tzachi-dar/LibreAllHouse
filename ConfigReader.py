@@ -89,6 +89,9 @@ class Config:
             self.bt_mac_addreses = mac.lower()
             self.bt_mac_addreses_last_set = time.time()
     
+    def XDripConnected(self):
+        self.bt_mac_addreses_last_set = time.time()
+    
     # Returns true if we have a new mac (= a new sensor)
     # or that we did not talk with xDrip for 3 minutes (this is needed to allow someone else to try and talk).    
     def ShouldDisconnectConnection(self, mac):
