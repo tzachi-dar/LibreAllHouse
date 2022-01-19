@@ -601,52 +601,52 @@ def ReadBLEData():
         return
     
     logging.info("Connecting to btDevice... %s", remote_mac)
-    dev = btle.Peripheral(remote_mac)
+    with btle.Peripheral(remote_mac) as dev:
 
-    logging.info("Connected - Services are:")
-    for svc in dev.services:
-        print (str(svc))
-    
-    NRF_UART_SERVICE = btle.UUID("0000fde3-0000-1000-8000-00805f9b34fb") # nrfDataService
- 
-    print ("charterstics...")
-    nrfGattService = dev.getServiceByUUID(NRF_UART_SERVICE)
-    for ch in nrfGattService.getCharacteristics():
-         print (str(ch))
-
-    NRF_UART_RX = btle.UUID("0000f001-0000-1000-8000-00805f9b34fb")
-    NRF_UART_TX = btle.UUID("0000f002-0000-1000-8000-00805f9b34fb")
-    CLIENT_CHARACTERISTIC_CONFIG =  btle.UUID("00002902-0000-1000-8000-00805f9b34fb")
-    
-    nrfGattCharacteristic = nrfGattService.getCharacteristics(NRF_UART_TX)
-    print ("nrfGattCharacteristic = ", nrfGattCharacteristic)
-    #print  nrfGattCharacteristic.supportsRead()
-    print (nrfGattCharacteristic[0].propertiesToString())
-
-    bdescriptor =  nrfGattCharacteristic[0].getDescriptors(CLIENT_CHARACTERISTIC_CONFIG)
-    bdescriptor[0].write(struct.pack('<bb', 0x01, 0x00), False)
-    CharacteristicSend = nrfGattService.getCharacteristics(NRF_UART_RX)[0]
-
-    dev.setDelegate( MyDelegate(CharacteristicSend) )
-    
-    connection_params = ReadDeviceAddresses(True)
-    if not connection_params:
-        return
-    latest_remote_mac = connection_params['MacAddress'].lower()
-    if latest_remote_mac != remote_mac:
-        logging.error('Mac has changed latest mac %s remote_mac %s', latest_remote_mac, remote_mac)
-        raise Exception('Mac has changed - new sensor?')
+        logging.info("Connected - Services are:")
+        for svc in dev.services:
+            print (str(svc))
         
-    str1 = base64.decodebytes(connection_params['BtUnlockBuffer'].encode('ascii'))
-    print(str1)
-    CharacteristicSend.write(str1)
-    # update xDrip only after write completes
-    ReadDeviceAddresses(False)
-    time.sleep(1.0) # Allow sensor to stabilize
-    
-    while ConfigReader.g_config.ShouldDisconnectConnection(latest_remote_mac) == False:
-        dev.waitForNotifications(1.0)
-    logging.error('disconnecting because of a new sensor, or timeout that is too big')
+        NRF_UART_SERVICE = btle.UUID("0000fde3-0000-1000-8000-00805f9b34fb") # nrfDataService
+     
+        print ("charterstics...")
+        nrfGattService = dev.getServiceByUUID(NRF_UART_SERVICE)
+        for ch in nrfGattService.getCharacteristics():
+             print (str(ch))
+
+        NRF_UART_RX = btle.UUID("0000f001-0000-1000-8000-00805f9b34fb")
+        NRF_UART_TX = btle.UUID("0000f002-0000-1000-8000-00805f9b34fb")
+        CLIENT_CHARACTERISTIC_CONFIG =  btle.UUID("00002902-0000-1000-8000-00805f9b34fb")
+        
+        nrfGattCharacteristic = nrfGattService.getCharacteristics(NRF_UART_TX)
+        print ("nrfGattCharacteristic = ", nrfGattCharacteristic)
+        #print  nrfGattCharacteristic.supportsRead()
+        print (nrfGattCharacteristic[0].propertiesToString())
+
+        bdescriptor =  nrfGattCharacteristic[0].getDescriptors(CLIENT_CHARACTERISTIC_CONFIG)
+        bdescriptor[0].write(struct.pack('<bb', 0x01, 0x00), False)
+        CharacteristicSend = nrfGattService.getCharacteristics(NRF_UART_RX)[0]
+
+        dev.setDelegate( MyDelegate(CharacteristicSend) )
+        
+        connection_params = ReadDeviceAddresses(True)
+        if not connection_params:
+            return
+        latest_remote_mac = connection_params['MacAddress'].lower()
+        if latest_remote_mac != remote_mac:
+            logging.error('Mac has changed latest mac %s remote_mac %s', latest_remote_mac, remote_mac)
+            raise Exception('Mac has changed - new sensor?')
+            
+        str1 = base64.decodebytes(connection_params['BtUnlockBuffer'].encode('ascii'))
+        print(str1)
+        CharacteristicSend.write(str1)
+        # update xDrip only after write completes
+        ReadDeviceAddresses(False)
+        time.sleep(1.0) # Allow sensor to stabilize
+        
+        while ConfigReader.g_config.ShouldDisconnectConnection(latest_remote_mac) == False:
+            dev.waitForNotifications(1.0)
+        logging.error('disconnecting because of a new sensor, or timeout that is too big')
 
 logging.basicConfig(level=logging.DEBUG, format='%(levelname)s %(asctime)s %(message)s')
         
