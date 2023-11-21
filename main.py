@@ -6,6 +6,7 @@ from time import gmtime, strftime
 import datetime
 import sys
 import socket
+import ipaddress
 from pymongo import MongoClient
 import sqlite3
 import os
@@ -290,6 +291,7 @@ def CreateVersion2Response(decoded):
    
 
 def clientThread(connlocal, ip_addr):
+    print("xxxxxxxxxx", ip_addr)
     try:
         connlocal.settimeout(10)
         while True:
@@ -324,8 +326,18 @@ def clientThread(connlocal, ip_addr):
         exc_type, exc_value, exc_traceback = sys.exc_info()
         traceback.print_exception(exc_type, exc_value, exc_traceback)
 
+def CreateAddrString(addr):
+# addr is a tupple (host, port, flowinfo, scope_id)
+# for ip v4 we return as is.
+# for ip v6 we should return [ip%interface]
+    ip_addr = ipaddress.ip_address(addr[0])
+    if ip_addr.ipv4_mapped is not None:
+        return format(ip_addr.ipv4_mapped)
+    if_name = socket.if_indextoname(addr[3])
+    return '[%s%%%s]' % (addr[0], if_name )
+
 def CreateListeningSocket():
-    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    s = socket.socket(socket.AF_INET6, socket.SOCK_STREAM)
     s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
 
     print ('Socket created')
@@ -345,9 +357,10 @@ def CreateListeningSocket():
 
     while 1:
         conn, addr = s.accept()
-        logging.info('Connected with ' + addr[0] + ':' + str(addr[1]))
+        #logging.info('Connected with ' + addr[0] + ':' + str(addr[1]) + 'conn=' +  type(conn) +  'addr=' +  type(addr) +  addr)
+        print('Connected with ' + addr[0] + ':' + str(addr[1]) , 'conn=' ,  type(conn) ,  'addr=' ,  type(addr) ,  addr)
 
-        threading.Thread(target=clientThread, args=(conn, addr[0])).start()
+        threading.Thread(target=clientThread, args=(conn, CreateAddrString(addr))).start()
 
 def CreateListeningSocketWrapper():
     while 1:
