@@ -290,9 +290,10 @@ def CreateVersion2Response(decoded):
     
    
 
-def clientThread(connlocal, ip_addr):
-    print("xxxxxxxxxx", ip_addr)
+def clientThread(connlocal, addr):
     try:
+        ip_addr = CreateAddrString(addr)
+        print("xxxxxxxx", addr, ip_addr)
         connlocal.settimeout(10)
         while True:
             data = connlocal.recv(1024)
@@ -333,6 +334,7 @@ def CreateAddrString(addr):
     ip_addr = ipaddress.ip_address(addr[0])
     if ip_addr.ipv4_mapped is not None:
         return format(ip_addr.ipv4_mapped)
+    print('addr3', addr[3])
     if_name = socket.if_indextoname(addr[3])
     return '[%s%%%s]' % (addr[0], if_name )
 
@@ -360,7 +362,7 @@ def CreateListeningSocket():
         #logging.info('Connected with ' + addr[0] + ':' + str(addr[1]) + 'conn=' +  type(conn) +  'addr=' +  type(addr) +  addr)
         print('Connected with ' + addr[0] + ':' + str(addr[1]) , 'conn=' ,  type(conn) ,  'addr=' ,  type(addr) ,  addr)
 
-        threading.Thread(target=clientThread, args=(conn, CreateAddrString(addr))).start()
+        threading.Thread(target=clientThread, args=(conn, addr)).start()
 
 def CreateListeningSocketWrapper():
     while 1:
