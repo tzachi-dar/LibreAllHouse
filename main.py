@@ -335,6 +335,8 @@ def CreateAddrString(addr):
     if ip_addr.ipv4_mapped is not None:
         return format(ip_addr.ipv4_mapped)
     print('addr3', addr[3])
+    if addr[3] == 0:
+        return addr[0]
     if_name = socket.if_indextoname(addr[3])
     return '[%s%%%s]' % (addr[0], if_name )
 
