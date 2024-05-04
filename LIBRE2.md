@@ -9,6 +9,7 @@
   - [Step 5 - Configure xDrip to connect to PI](#step-5---configure-xdrip-to-connect-to-pi)
   - [Step 6 - Configure Pi to connect to xdrip](#step-6---configure-pi-to-connect-to-xdrip)
   - [Step 7 - Install the latest version of bluepy from sources](#step-7---install-the-latest-version-of-bluepy-from-sources)
+  - [step 8 - Use mdns to connect to the pi (optional)](## step 8 - Use mdns to connect to the pi (optional))
   - [Appendix A- Increasing the connection range:](#appendix-a--increasing-the-connection-range)
   - [Appendix B - Important screen commands (just information nothing to do):](#appendix-b---important-screen-commands-just-information-nothing-to-do)
   - [Appendix C - Configuring the pis to be detected by xDrip.](#appendix-c---configuring-the-pis-to-be-detected-by-xdrip)
@@ -110,8 +111,8 @@ sudo cp ./build/lib.linux-armv7l-2.7/bluepy/bluepy-helper /usr/local/lib/python3
 sudo cp ./bluepy/bluepy-helper /usr/local/lib/python3.7/dist-packages/bluepy/bluepy-helper
 ```
 
-##step 8 optional:
-Use mdns to connect to the pi.
+## step 8 - Use mdns to connect to the pi (optional)
+
 
 1. On the file /etc/avahi/avahi-daemon.conf change  
 publish-workstation=yes  
