@@ -110,6 +110,25 @@ sudo cp ./build/lib.linux-armv7l-2.7/bluepy/bluepy-helper /usr/local/lib/python3
 sudo cp ./bluepy/bluepy-helper /usr/local/lib/python3.7/dist-packages/bluepy/bluepy-helper
 ```
 
+##step 8 optional:
+Use mdns to connect to the pi.
+
+1. On the file /etc/avahi/avahi-daemon.conf change  
+publish-workstation=yes  
+
+restart the service (sudo /etc/init.d/avahi-daemon restart) or reboot after the next step.  
+
+2. Disable ipv6 following [this](https://www.howtoraspberry.com/2020/04/disable-ipv6-on-raspberry-pi/)
+From my experience adding
+```
+net.ipv6.conf.all.disable_ipv6 = 1
+net.ipv6.conf.default.disable_ipv6 = 1
+net.ipv6.conf.lo.disable_ipv6 = 1  
+```
+to /etc/sysctl.conf was enough.  
+reboot the server and verify ipv6 is disabled.
+
+
 ## Appendix A- Increasing the connection range:
 ![Alt text](Bluetooth1.png?raw=true "Title")
 My experience show that libre2 Bluetooth power is smaller than the miaomiao. In order to increase the 
