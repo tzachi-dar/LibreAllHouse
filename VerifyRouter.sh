@@ -3,6 +3,8 @@ sleep $SLEEP_TIME
 DEFAULT_GATEWAY=`route -n | grep ^0.0.0.0 | grep wlan0 |awk '{print $2 }'`
 echo $DEFAULT_GATEWAY
 
+echo Starting script
+
 while true
 do
     ping -c 1 $DEFAULT_GATEWAY
@@ -17,6 +19,7 @@ do
     fi
 
     date
+    iwconfig
     echo counter is now $COUNT
     #Check the values
     if [[ $COUNT -gt 10 ]]
