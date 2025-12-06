@@ -18,8 +18,10 @@ do
        COUNT=$((COUNT+1))
     fi
 
-    date
     iwconfig
+    my_ap=$(iwconfig wlan0 | grep Access)
+    my_date=$(date +"%F %T")
+    echo xxxx $my_date $my_ap
     echo counter is now $COUNT
     #Check the values
     if [[ $COUNT -gt 10 ]]
