@@ -83,6 +83,9 @@ class Config:
         if self.xdrip_ip_addresses_in_file:
             return
         self.xdrip_ip_addresses = ip_addresses
+
+    def ClearXdripAdress(self):
+        self.xdrip_ip_addresses = None
         
     def SetMacAddresses(self, mac):
         if mac:

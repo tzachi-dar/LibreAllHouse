@@ -648,6 +648,7 @@ def ReadBLEData():
         while ConfigReader.g_config.ShouldDisconnectConnection(latest_remote_mac) == False:
             dev.waitForNotifications(1.0)
         logging.error('disconnecting because of a new sensor, or timeout that is too big')
+        ConfigReader.g_config.ClearXdripAdress()
 
 logging.basicConfig(level=logging.DEBUG, format='%(levelname)s %(asctime)s %(message)s')
         
