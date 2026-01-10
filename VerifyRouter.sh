@@ -23,6 +23,7 @@ do
     my_date=$(date +"%F %T")
     echo xxxx $my_date $my_ap
     ifconfig wlan0
+    python3 /home/pi/LibreAllHouse/check_connectivity.py
     echo counter is now $COUNT
     #Check the values
     if [[ $COUNT -gt 10 ]]
