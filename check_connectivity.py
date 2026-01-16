@@ -1,6 +1,8 @@
 import socket
 import concurrent.futures
 import errno
+from datetime import datetime
+
 
 def check_ip(ip, port):
     """
@@ -10,7 +12,7 @@ def check_ip(ip, port):
     """
     try:
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-            s.settimeout(10.0)
+            s.settimeout(20.0)
             result_code = s.connect_ex((ip, port))
             
             # 0 = Success
@@ -34,14 +36,20 @@ def main():
         results = list(executor.map(lambda ip: check_ip(ip, target_port), target_ips))
 
     # Formatting Output
-    print("  ".join(target_ips))
+    print("                        ","  ".join(target_ips))
     
     status_line = []
+    count = 0
     for i, ip in enumerate(target_ips):
         padding = " " * (len(ip) // 2)
         status_line.append(f"{padding}{results[i]}{padding}")
-    
-    print("##", " ".join(status_line))
+        if results[i] == "*":
+            count += 1
+    if count == len(target_ips):
+        header = "###"
+    else:
+        header = "##"
+    print(header, datetime.now().strftime("%d-%m-%Y - %H:%M:%S"), " ".join(status_line))
 
 if __name__ == "__main__":
     main()
